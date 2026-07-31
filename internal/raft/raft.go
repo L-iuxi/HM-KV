@@ -2,7 +2,6 @@ package raft
 
 import (
 	"TicketX/internal/labgob"
-	"TicketX/internal/persister"
 	types "TicketX/internal/type"
 	"TicketX/internal/wal"
 	"TicketX/proto"
@@ -10,10 +9,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
-
-	"math/rand"
 	"sync"
 	"time"
 
@@ -54,11 +52,10 @@ type Raft struct {
 	me            int      //当前服务器在peer的下标
 	peers         []string //存有所有服务器的组
 	clients       []proto.RaftClient
-	states        State                //状态
-	term          int32                //当前任期号
-	vote          int32                //投票给
-	persister     *persister.Persister // 持久化状态的对象，用来保存Raft状态，以便在崩溃和重启后恢复
-	log           []types.LogEntry     //日志
+	states        State            //状态
+	term          int32            //当前任期号
+	vote          int32            //投票给
+	log           []types.LogEntry //日志
 	nowLeader     int64
 	lastHeartbeat time.Time
 
@@ -106,20 +103,10 @@ type HeartbeatReply struct {
 	ConflictIndex int32 //冲突位置
 }
 
-type InstallSnapshotArgs struct {
-	Term          int32
-	LeaderId      int32
-	LastSnapIndex int32
-	LastSnapTerm  int32
-	Data          []byte //snap内容
-}
 type SnapshotRecord struct {
 	LastIncludedIndex int32
 	LastIncludedTerm  int32
 	Path              string
-}
-type InstallSnapshotReply struct {
-	Term int32
 }
 
 func (rf *Raft) GetCommitIndex() int {
@@ -148,66 +135,6 @@ func (rf *Raft) GetState() (int32, bool) {
 	}
 	term = rf.term
 	return term, isleader
-}
-
-func (rf *Raft) encodeState() []byte {
-	w := new(bytes.Buffer)
-	e := labgob.NewEncoder(w)
-
-	e.Encode(rf.log)
-	e.Encode(rf.vote)
-	e.Encode(rf.term)
-	e.Encode(rf.lastSnapIndex)
-	e.Encode(rf.lastSnapTerm)
-
-	return w.Bytes()
-
-}
-
-// 持久化保存当前raft状态，防止节点崩溃
-func (rf *Raft) persist() {
-	states := rf.encodeState()
-	rf.persister.Save(states, rf.snap)
-}
-
-// 解码持久化信息
-func (rf *Raft) readPersist(data []byte) {
-	if data == nil || len(data) < 1 { // bootstrap without any states?
-		return
-	}
-
-	r := bytes.NewBuffer(data)
-	d := labgob.NewDecoder(r)
-
-	var Log []types.LogEntry
-	var Term int32
-	var Vote int32
-	var SnapIndex int32
-	var SnapTerm int32
-
-	if d.Decode(&Log) != nil || d.Decode(&Vote) != nil || d.Decode(&Term) != nil || d.Decode(&SnapIndex) != nil || d.Decode(&SnapTerm) != nil {
-		//解码失败
-	} else {
-		rf.log = Log
-		rf.vote = Vote
-		rf.term = Term
-		rf.lastSnapIndex = SnapIndex
-		rf.lastSnapTerm = SnapTerm
-	}
-
-}
-
-// how many bytes in Raft's persisted log?
-// 读取raft日志中多少bytes
-func (rf *Raft) PersistBytes() int32 {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	return int32(rf.persister.RaftStateSize())
-}
-
-// 获取
-func (rf *Raft) getRealIndex(i int32) int32 {
-	return i - rf.lastSnapIndex
 }
 
 // 未快照截断的日志长度
@@ -377,7 +304,6 @@ func (rf *Raft) broadcastAppendEntries() {
 				rf.term = reply.Term
 				rf.states = Follower
 				rf.vote = -1
-				rf.persist()
 			}
 		}(int32(i))
 	}
@@ -399,7 +325,6 @@ func (rf *Raft) AppendEntries(ctx context.Context, args *proto.HeartbeatArgs) (*
 	if args.LeaderTerm > rf.term { //自己落后，更新任期
 		rf.term = args.LeaderTerm
 		rf.vote = -1
-		rf.persist()
 	}
 	rf.states = Follower
 	rf.nowLeader = int64(args.LeaderId)
@@ -450,12 +375,10 @@ func (rf *Raft) AppendEntries(ctx context.Context, args *proto.HeartbeatArgs) (*
 
 				rf.log = rf.log[:int(index)+i] //从当前开始覆盖后面所有
 				rf.log = append(rf.log, incoming[i:]...)
-				rf.persist()
 				break
 			}
 		} else {
 			rf.log = append(rf.log, incoming[i:]...)
-			rf.persist()
 			break
 		}
 	}
@@ -467,7 +390,6 @@ func (rf *Raft) AppendEntries(ctx context.Context, args *proto.HeartbeatArgs) (*
 		}
 	}
 
-	rf.persist()
 	reply.Success = true
 	reply.Term = rf.term
 	return reply, nil
@@ -534,7 +456,6 @@ func (rf *Raft) sendInstallSnapshot(peer int32) {
 	if int32(res.Term) > rf.term {
 		rf.term = int32(res.Term)
 		rf.states = Follower
-		rf.persist()
 		return
 	}
 
@@ -558,7 +479,7 @@ func (rf *Raft) InstallSnapshot(ctx context.Context, args *proto.InstallSnapshot
 		fmt.Printf("Failed to write received snapshot to file: %v", err)
 	}
 
-	// 2. Persist snapshot metadata to WAL
+	//  WAL
 	record := SnapshotRecord{
 		LastIncludedIndex: args.LastSnapIndex,
 		LastIncludedTerm:  args.LastSnapTerm,
@@ -595,16 +516,6 @@ func (rf *Raft) InstallSnapshot(ctx context.Context, args *proto.InstallSnapshot
 	rf.snap = make([]byte, len(args.Data))
 	copy(rf.snap, args.Data)
 
-	rf.persister.Save(rf.encodeState(), rf.snap)
-
-	go func() {
-		rf.applyCh <- ApplyMsg{
-			SnapshotValid: true,
-			Snapshot:      args.Data,
-			SnapshotIndex: args.LastSnapIndex,
-			SnapshotTerm:  args.LastSnapTerm,
-		}
-	}()
 	return reply, nil
 }
 
@@ -636,16 +547,6 @@ func (rf *Raft) Start(data []byte) (int32, int32, bool, int64) {
 	return int32(index), term, isleader, rf.nowLeader
 }
 func (rf *Raft) persistEntry(entry types.LogEntry) {
-	var buf bytes.Buffer
-	if err := labgob.NewEncoder(&buf).Encode(entry); err != nil {
-		fmt.Println("Failed to encode log entry: %v", err)
-	}
-	if err := rf.wal.Write(wal.RecTypeEntry, buf.Bytes()); err != nil {
-		fmt.Println("Failed to write entry to WAL: %v", err)
-	}
-
-}
-func (rf *Raft) persistSnapshot(entry types.LogEntry) {
 	var buf bytes.Buffer
 	if err := labgob.NewEncoder(&buf).Encode(entry); err != nil {
 		fmt.Println("Failed to encode log entry: %v", err)
@@ -697,8 +598,6 @@ func (rf *Raft) ticker() {
 				term := rf.term
 				me := rf.me
 
-				rf.persist()
-
 				// 重置选举超时(确保时间现在不是正在触发/刚触发状态，再重置选举超时时间)
 				if !rf.overElectiontime.Stop() {
 					select {
@@ -746,7 +645,6 @@ func (rf *Raft) ticker() {
 							rf.term = reply.Term
 							rf.states = Follower
 							rf.vote = -1
-							rf.persist()
 							rf.mu.Unlock()
 							return
 						}
@@ -799,7 +697,7 @@ func (rf *Raft) ApplyLoop() {
 			msg := ApplyMsg{
 				CommandValid: true,
 				CommandIndex: int64(rf.lastApply),
-				Command:      rf.log[rf.lastApply].Command,
+				Command:      rf.log[rf.lastApply-rf.lastSnapIndex].Command,
 			}
 
 			rf.mu.Unlock()
@@ -887,9 +785,9 @@ func (rf *Raft) appendLogEntry(data []byte) error {
 	return nil
 }
 
-func MakeRaft(applyCh chan ApplyMsg, peers []string, me int32, persister *persister.Persister) *Raft {
+func MakeRaft(applyCh chan ApplyMsg, peers []string, me int32) *Raft {
 	rf := &Raft{}
-	rf.wal = wal.NewWal("../download")
+	rf.wal = wal.NewWal("../download/wal.log")
 	if rf.wal.Exists() {
 		rf.LoadFromWAL()
 	}
@@ -898,14 +796,12 @@ func MakeRaft(applyCh chan ApplyMsg, peers []string, me int32, persister *persis
 	rf.term = 0
 	rf.states = Follower
 	rf.vote = -1
-	rf.persister = persister
 	rf.lastSnapIndex = 0
 	rf.lastSnapTerm = 0
 	rf.nextIndex = make([]int32, len(peers))
 	rf.commitIndex = 0   //刚开始没有待提交的日志
 	rf.lastApply = 0     //刚开始没有已经执行的日志
 	rf.applyCh = applyCh //与上层kvserver联系的管道
-	rf.snap = persister.ReadSnapshot()
 
 	rf.matchIndex = make([]int32, len(peers))
 	rf.overElectiontime = time.NewTimer(
