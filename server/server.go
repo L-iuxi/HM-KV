@@ -25,7 +25,7 @@ func startNode(me int) {
 	peers := peerAddrs
 
 	// 每个节点自己的 KvServer + Raft
-	kvServer := kv.MakeKVServer(peers, me)
+	kvServer := kv.MakeKVServer(peers, me, "./data")
 
 	port := peerAddrs[me]
 	lis, err := net.Listen("tcp", port)
