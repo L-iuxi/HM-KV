@@ -4,12 +4,17 @@ package proto;
 
 option go_package = "/proto;proto";
 
+//kv相关接口
 service Kv {
     rpc Put(PutRequest) returns (PutReply);
     rpc Get(GetRequest) returns (GetReply);
+    rpc Delete(DeleteRequest) returns (DeleteReply);
+    rpc Batch(BatchRequest) returns (BatchReply);
     rpc Watch(WatchRequest)
         returns (stream WatchResponse);
 }
+
+//raft相关接口
 service Raft {
 
     // 选举
@@ -22,10 +27,21 @@ service Raft {
     rpc InstallSnapshot (InstallSnapshotArgs) returns (InstallSnapshotReply);
 }
 
-message WatchRequest{
-    string key = 1;
+enum ErrorType{
+    OK = 0;
+    WRONG_LEADER = 1;
+    KEY_NOT_EXIST = 2;
+    WRONG_VERSION = 3;
+    INTERNAL_ERROR = 4;
 }
 
+//watch请求
+message WatchRequest{
+    string key = 1;
+    int64 start_reversion = 2;//从哪个版本开始watch
+}
+
+//watch回复
 message WatchResponse{
     string key = 1;
     string value = 2;
@@ -34,41 +50,78 @@ message WatchResponse{
     ErrorType err = 5;
     int64 leader_id = 6;
 }
+
+//put请求
 message PutRequest {
     string key = 1;
     string value = 2;
-
     int64 request_id = 3;
     int64 client_id = 4;
     int64 expected_version = 5;
-    int64 ttl = 6;
+    int64 expire_at = 6;//过期时间
 }
 
+//put回复
 message PutReply {
   ErrorType error = 1;
   int64  leader_id = 2;
-  int64 Version = 3;
+  int64 version = 3;
 }
 
 message GetRequest {
     string key = 1;
-
     int64 request_id = 2;
     int64 client_id = 3;
     int64 version = 4;
+    bool prefix = 5;//是否按前缀查询
 }
-enum ErrorType{
-    OK = 0;
-    WRONG_LEADER = 1;
-    KEY_NOT_EXIST = 2;
-    WRONG_VERSION = 3;
+
+message KeyValue{
+    string key = 1;
+    string value = 2;
 }
+
 message GetReply {
-    string value = 1;
-   ErrorType error = 2;
+    repeated KeyValue kvs = 1;
+    ErrorType error = 2;
     int64 leader_id = 3;
     int64 Version = 4;
 }
+
+//删除请求
+message DeleteRequest{
+    string key = 1;
+    int64 request_id = 2;
+    int64 client_id = 3;
+}
+
+message DeleteReply{
+    ErrorType error = 1;
+    int64 leader_id = 2;
+    int64 version = 3;
+}
+
+message Entry{
+    string type = 1;
+    string key = 2;
+    string value = 3;
+    int64 expire_at = 4;//过期时间
+}
+
+//客户端批量提交
+message BatchRequest{
+    repeated Entry entries = 1;
+    int64 client_id = 2;
+    int64 request_id = 3;
+}
+
+message BatchReply{
+     bool success = 1;
+     ErrorType error = 2;
+     int64 leader_id = 3;
+}
+
+ 
 message RequestVoteArgs {
     int32 term = 1;
     int32 candidate_id = 2;
@@ -115,12 +168,14 @@ message InstallSnapshotArgs {
 message InstallSnapshotReply {
     int32 term = 1;
 }
+
 message Op {
   string type = 1;
   string key = 2;
   string value = 3;
   int64 client_id = 4;
   int64 request_id = 5;
-  int64 ExpectedVersion = 6;
-  int64 TTL = 7;
+  int64 expected_version = 6;
+  int64 expire_at = 7;
+  repeated Entry entries = 8; //Batch 用
 }
