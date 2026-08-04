@@ -9,9 +9,11 @@ import (
 // New 创建 MVCC 实例
 func New(store *db.Store) *MVCC {
 	return &MVCC{
-		store:   store,
-		latest:  make(map[string]int64),
-		history: make(map[string][]int64),
+		store:     store,
+		latest:    make(map[string]int64),
+		history:   make(map[string][]int64),
+		revisions: make([]RevisionEntry, 0),
+		stop:      make(chan struct{}),
 	}
 }
 
@@ -33,6 +35,13 @@ func (mvcc *MVCC) Put(key, value string) int64 {
 
 	mvcc.latest[key] = rev
 	mvcc.history[key] = append(mvcc.history[key], rev)
+
+	re := RevisionEntry{
+		Key:      key,
+		Revision: rev,
+	}
+
+	mvcc.revisions = append(mvcc.revisions, re)
 
 	return rev
 }
@@ -56,6 +65,12 @@ func (mvcc *MVCC) Delete(key string) int64 {
 
 	mvcc.latest[key] = rev
 	mvcc.history[key] = append(mvcc.history[key], rev)
+	re := RevisionEntry{
+		Key:      key,
+		Revision: rev,
+	}
+
+	mvcc.revisions = append(mvcc.revisions, re)
 
 	return rev
 }
@@ -127,6 +142,12 @@ func (mvcc *MVCC) PutWithCAS(key, value string, expectedVersion int64) (int64, e
 
 	mvcc.latest[key] = rev
 	mvcc.history[key] = append(mvcc.history[key], rev)
+	re := RevisionEntry{
+		Key:      key,
+		Revision: rev,
+	}
+
+	mvcc.revisions = append(mvcc.revisions, re)
 
 	return rev, nil
 }
