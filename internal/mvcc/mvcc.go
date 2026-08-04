@@ -4,14 +4,7 @@ import (
 	"TicketX/internal/db"
 	types "TicketX/internal/type"
 	"fmt"
-	"strings"
 )
-
-// KeyValue 前缀扫描结果
-type KeyValue struct {
-	Key   string
-	Value string
-}
 
 // New 创建 MVCC 实例
 func New(store *db.Store) *MVCC {
@@ -106,48 +99,6 @@ func (mvcc *MVCC) GetLatest(key string) (int64, bool) {
 	defer mvcc.mu.Unlock()
 	rev, ok := mvcc.latest[key]
 	return rev, ok
-}
-
-// PrefixScan 按前缀扫描，返回每个 key 的最新非删除版本
-func (mvcc *MVCC) PrefixScan(prefix string) ([]KeyValue, error) {
-	results, err := mvcc.store.PrefixScan(prefix)
-	if err != nil {
-		return nil, err
-	}
-
-	type latestEntry struct {
-		value   string
-		version int64
-		deleted bool
-	}
-	latestMap := make(map[string]latestEntry)
-
-	for _, r := range results {
-		lastSlash := strings.LastIndex(r.Key, "/")
-		if lastSlash == -1 {
-			continue
-		}
-		originalKey := r.Key[:lastSlash]
-
-		current, exists := latestMap[originalKey]
-		if !exists || r.Version > current.version {
-			latestMap[originalKey] = latestEntry{
-				value:   r.Value,
-				version: r.Version,
-				deleted: r.Deleted,
-			}
-		}
-	}
-
-	var kvs []KeyValue
-	for key, entry := range latestMap {
-		if entry.deleted {
-			continue
-		}
-		kvs = append(kvs, KeyValue{Key: key, Value: entry.value})
-	}
-
-	return kvs, nil
 }
 
 // PutWithCAS 带版本检查的写入。expectedVersion=0 表示无条件写。
