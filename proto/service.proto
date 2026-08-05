@@ -12,6 +12,8 @@ service Kv {
     rpc Batch(BatchRequest) returns (BatchReply);
     rpc Watch(WatchRequest)
         returns (stream WatchResponse);
+    rpc Compact(CompactRequest) returns (CompactReply);
+    rpc KeepAlive(KeepAliveRequest) returns (KeepAliveReply);
 }
 
 //raft相关接口
@@ -33,12 +35,14 @@ enum ErrorType{
     KEY_NOT_EXIST = 2;
     WRONG_VERSION = 3;
     INTERNAL_ERROR = 4;
+    COMPACT_ERROR = 5;
 }
 
 //watch请求
 message WatchRequest{
     string key = 1;
     int64 start_reversion = 2;//从哪个版本开始watch
+    bool prefix = 3;
 }
 
 //watch回复
@@ -99,6 +103,29 @@ message DeleteReply{
     ErrorType error = 1;
     int64 leader_id = 2;
     int64 version = 3;
+}
+
+//compact请求
+message CompactRequest{
+    int64 revision = 1;//compact到这个版本
+    int64 client_id = 2;
+    int64 request_id = 3;
+}
+
+message CompactReply{
+    ErrorType error = 1;
+    int64 leader_id = 2;
+}
+
+//keepalive请求
+message KeepAliveRequest{
+    string key = 1;
+}
+
+//keepalive回复
+message KeepAliveReply{
+    ErrorType error = 1;
+    int64 leader_id = 2;
 }
 
 message Entry{

@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             v3.21.9
-// source: service.proto
+// source: proto/service.proto
 
 package proto
 
@@ -19,11 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Kv_Put_FullMethodName    = "/proto.Kv/Put"
-	Kv_Get_FullMethodName    = "/proto.Kv/Get"
-	Kv_Delete_FullMethodName = "/proto.Kv/Delete"
-	Kv_Batch_FullMethodName  = "/proto.Kv/Batch"
-	Kv_Watch_FullMethodName  = "/proto.Kv/Watch"
+	Kv_Put_FullMethodName       = "/proto.Kv/Put"
+	Kv_Get_FullMethodName       = "/proto.Kv/Get"
+	Kv_Delete_FullMethodName    = "/proto.Kv/Delete"
+	Kv_Batch_FullMethodName     = "/proto.Kv/Batch"
+	Kv_Watch_FullMethodName     = "/proto.Kv/Watch"
+	Kv_Compact_FullMethodName   = "/proto.Kv/Compact"
+	Kv_KeepAlive_FullMethodName = "/proto.Kv/KeepAlive"
 )
 
 // KvClient is the client API for Kv service.
@@ -37,6 +39,8 @@ type KvClient interface {
 	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteReply, error)
 	Batch(ctx context.Context, in *BatchRequest, opts ...grpc.CallOption) (*BatchReply, error)
 	Watch(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchResponse], error)
+	Compact(ctx context.Context, in *CompactRequest, opts ...grpc.CallOption) (*CompactReply, error)
+	KeepAlive(ctx context.Context, in *KeepAliveRequest, opts ...grpc.CallOption) (*KeepAliveReply, error)
 }
 
 type kvClient struct {
@@ -106,6 +110,26 @@ func (c *kvClient) Watch(ctx context.Context, in *WatchRequest, opts ...grpc.Cal
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Kv_WatchClient = grpc.ServerStreamingClient[WatchResponse]
 
+func (c *kvClient) Compact(ctx context.Context, in *CompactRequest, opts ...grpc.CallOption) (*CompactReply, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompactReply)
+	err := c.cc.Invoke(ctx, Kv_Compact_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kvClient) KeepAlive(ctx context.Context, in *KeepAliveRequest, opts ...grpc.CallOption) (*KeepAliveReply, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(KeepAliveReply)
+	err := c.cc.Invoke(ctx, Kv_KeepAlive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // KvServer is the server API for Kv service.
 // All implementations must embed UnimplementedKvServer
 // for forward compatibility.
@@ -117,6 +141,8 @@ type KvServer interface {
 	Delete(context.Context, *DeleteRequest) (*DeleteReply, error)
 	Batch(context.Context, *BatchRequest) (*BatchReply, error)
 	Watch(*WatchRequest, grpc.ServerStreamingServer[WatchResponse]) error
+	Compact(context.Context, *CompactRequest) (*CompactReply, error)
+	KeepAlive(context.Context, *KeepAliveRequest) (*KeepAliveReply, error)
 	mustEmbedUnimplementedKvServer()
 }
 
@@ -141,6 +167,12 @@ func (UnimplementedKvServer) Batch(context.Context, *BatchRequest) (*BatchReply,
 }
 func (UnimplementedKvServer) Watch(*WatchRequest, grpc.ServerStreamingServer[WatchResponse]) error {
 	return status.Error(codes.Unimplemented, "method Watch not implemented")
+}
+func (UnimplementedKvServer) Compact(context.Context, *CompactRequest) (*CompactReply, error) {
+	return nil, status.Error(codes.Unimplemented, "method Compact not implemented")
+}
+func (UnimplementedKvServer) KeepAlive(context.Context, *KeepAliveRequest) (*KeepAliveReply, error) {
+	return nil, status.Error(codes.Unimplemented, "method KeepAlive not implemented")
 }
 func (UnimplementedKvServer) mustEmbedUnimplementedKvServer() {}
 func (UnimplementedKvServer) testEmbeddedByValue()            {}
@@ -246,6 +278,42 @@ func _Kv_Watch_Handler(srv interface{}, stream grpc.ServerStream) error {
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Kv_WatchServer = grpc.ServerStreamingServer[WatchResponse]
 
+func _Kv_Compact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompactRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KvServer).Compact(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Kv_Compact_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KvServer).Compact(ctx, req.(*CompactRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Kv_KeepAlive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(KeepAliveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KvServer).KeepAlive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Kv_KeepAlive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KvServer).KeepAlive(ctx, req.(*KeepAliveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Kv_ServiceDesc is the grpc.ServiceDesc for Kv service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -269,6 +337,14 @@ var Kv_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Batch",
 			Handler:    _Kv_Batch_Handler,
 		},
+		{
+			MethodName: "Compact",
+			Handler:    _Kv_Compact_Handler,
+		},
+		{
+			MethodName: "KeepAlive",
+			Handler:    _Kv_KeepAlive_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -277,7 +353,7 @@ var Kv_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "service.proto",
+	Metadata: "proto/service.proto",
 }
 
 const (
@@ -465,5 +541,5 @@ var Raft_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "service.proto",
+	Metadata: "proto/service.proto",
 }
