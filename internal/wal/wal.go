@@ -18,50 +18,50 @@ var (
 	ErrClosed   = errors.New("wal: log is closed")
 )
 
-type Wal struct {
-	file   *os.File
-	dir    string
-	writer *bufio.Writer
-	seq    uint64
-}
-type LogHeader struct {
-	RecType RecType
-	Len     int32
-	CRC     uint32
-}
+type RecType byte
 
+const (
+	RecTypeEntry    RecType = 1 //存储日志
+	RecTypeState    RecType = 2 //存储raft信息
+	RecTypeSnapshot RecType = 3 //快照
+)
 const (
 	recordHeaderSize = 4 + 1 + 4
 	//NodeId + LogType + CRC
 )
 
-type RecType byte
+type Wal struct {
+	file   *os.File      //数据文件
+	dir    string        //数据目录
+	writer *bufio.Writer //缓冲写，先放入内存缓冲区，再一次刷盘
+	seq    uint64        //文件序号
+}
 
-const (
-	RecTypeEntry    RecType = 1 //存储日志条目信息
-	RecTypeState    RecType = 2 //存储raft信息
-	RecTypeSnapshot RecType = 3 //快照
-)
+type LogHeader struct {
+	RecType RecType //数据类型
+	Len     int32   //数据长度
+	CRC     uint32  //CRC校验
+}
 
 type WalEntry struct {
-	Header LogHeader
-	Data   []byte
+	Header LogHeader //数据信息
+	Data   []byte    //数据
 }
 
 func (w *Wal) Dir() string {
 	return w.dir
 }
-func NewWal(path string) *Wal {
-	dir := filepath.Dir(path)
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if err := os.MkdirAll(path, 0755); err != nil {
-			panic(err)
-		}
+// 创建目录下的WAL文件，path 为数据目录。
+func NewWal(dir string) *Wal {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		panic(err)
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+
+	path := filepath.Join(dir, "wal.log")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		panic(fmt.Sprintf("failed to open WAL file: %v", err))
+		panic(err)
 	}
 
 	writer := bufio.NewWriter(file)
@@ -73,20 +73,25 @@ func NewWal(path string) *Wal {
 		seq:    0,
 	}
 }
+
+// 写WAL
 func (w *Wal) Write(rectype RecType, data []byte) error {
 	if w.writer == nil {
 		return ErrClosed
 	}
 
+	//创建header，写header信息
 	header := make([]byte, recordHeaderSize)
 	binary.BigEndian.PutUint32(header[0:4], uint32(1+len(data)+4))
 	header[4] = byte(rectype)
 
+	//算crc
 	crc := crc32.NewIEEE()
 	crc.Write([]byte{byte(rectype)})
 	crc.Write(data)
 	binary.BigEndian.PutUint32(header[5:9], crc.Sum32())
 
+	//写入磁盘
 	if _, err := w.writer.Write(header); err != nil {
 		return err
 	}
@@ -98,56 +103,57 @@ func (w *Wal) Write(rectype RecType, data []byte) error {
 	return w.writer.Flush()
 }
 
-// LoadAll reads all records from the WAL files.
+// 从WAL文件里面加载所有日志
 func (w *Wal) LoadAll() (records [][]byte, types []RecType, err error) {
-	// 1. Get list of WAL files
+	// 获取WAL文件列表
 	names, err := listLogFiles(w.dir)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// 2. Iterate over all WAL files
+	// 读取文件内容
 	for _, name := range names {
 		path := filepath.Join(w.dir, name)
-		f, err := os.Open(path) // Open each WAL file
+		f, err := os.Open(path)
 		if err != nil {
 			return nil, nil, err
 		}
-		defer f.Close() // Ensure the file is closed when the function exits
+		defer f.Close()
 
-		reader := bufio.NewReader(f) // Use buffered reader for better performance
+		//把读取的数据先放到缓冲区，减少系统调用
+		reader := bufio.NewReader(f)
 		for {
-			// 3. Read header (first 9 bytes)
+			// 获取header
 			header := make([]byte, recordHeaderSize)
 			_, err := io.ReadFull(reader, header)
 			if err == io.EOF {
-				break // End of file, normal exit
+				break
 			}
 			if err != nil {
 				return nil, nil, err
 			}
 
-			// 4. Decode the header
-			length := binary.BigEndian.Uint32(header[0:4])      // Get total length
-			recType := RecType(header[4])                       // Get the record type
-			expectedCrc := binary.BigEndian.Uint32(header[5:9]) // Get the expected CRC value
+			// 解码头
+			length := binary.BigEndian.Uint32(header[0:4])
+			recType := RecType(header[4])
+			expectedCrc := binary.BigEndian.Uint32(header[5:9])
 
-			// 5. Read data (length - header size)
-			dataLen := length - (1 + 4) // Subtract type (1 byte) and CRC (4 bytes)
+			// 获取数据
+			dataLen := length - (1 + 4)
 			data := make([]byte, dataLen)
 			if _, err := io.ReadFull(reader, data); err != nil {
 				return nil, nil, err
 			}
 
-			// 6. Verify CRC
+			//校验crc
 			crc := crc32.NewIEEE()
-			crc.Write([]byte{byte(recType)}) // Write the record type
-			crc.Write(data)                  // Write the data
-			if crc.Sum32() != expectedCrc {  // Compare CRC values
-				return nil, nil, ErrCorrupt // If CRC doesn't match, return error
+			crc.Write([]byte{byte(recType)})
+			crc.Write(data)
+			if crc.Sum32() != expectedCrc {
+				return nil, nil, ErrCorrupt
 			}
 
-			// 7. Append record and type to the result slices
+			// 加入数据
 			records = append(records, data)
 			types = append(types, recType)
 		}
@@ -155,20 +161,24 @@ func (w *Wal) LoadAll() (records [][]byte, types []RecType, err error) {
 
 	return records, types, nil
 }
+
+// 列出所有WAL文件
 func listLogFiles(dir string) ([]string, error) {
 	var files []string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		// Filter for .wal files
-		if !info.IsDir() && strings.HasSuffix(info.Name(), ".wal") {
+		// Filter for .log files
+		if !info.IsDir() && strings.HasSuffix(info.Name(), ".log") {
 			files = append(files, info.Name())
 		}
 		return nil
 	})
 	return files, err
 }
+
+// 删除不需要的旧日志文件
 func (w *Wal) Truncate(lastIndex uint64) error {
 	names, err := listLogFiles(w.dir)
 	if err != nil {
@@ -187,6 +197,6 @@ func (w *Wal) Truncate(lastIndex uint64) error {
 	return nil
 }
 func (w *Wal) Exists() bool {
-	_, err := os.Stat(w.dir)
+	_, err := os.Stat(filepath.Join(w.dir, "wal.log"))
 	return err == nil
 }
