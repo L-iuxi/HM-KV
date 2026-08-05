@@ -1,64 +1,31 @@
 package kv
 
 import (
+	"TicketX/internal/config"
 	"TicketX/internal/db"
 	"TicketX/internal/lease"
+	"TicketX/internal/mvcc"
 	"TicketX/internal/raft"
 	"TicketX/internal/watch"
 	"TicketX/proto"
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	po "google.golang.org/protobuf/proto"
 )
 
-// 把applyloop结果返回给put/get的
-type result struct {
-	Value   string
-	Version int64
-	Err     proto.ErrorType
-}
-
-type KvServer struct {
-	mu         sync.Mutex
-	store      *db.Store
-	currentRev int64
-	proto.UnimplementedKvServer
-	applyCh chan raft.ApplyMsg    //和raft通信的管道
-	waitCh  map[int64]chan result //确保put请求成功commit的管道
-
-	getCh map[int64]chan result //get fallback: ReadIndex 失败时走 Raft 日志
-
-	lastRequest map[int64]int64 //请求者对应的最后一个请求编号
-	rf          *raft.Raft
-	lastApplied int64
-	lastResult  map[int]result //上一次请求的结果
-	leaseMgr    *lease.LeaseManager
-	latest      map[string]int64   //每个建的最新版本
-	history     map[string][]int64 //每个建的历史版本
-
-	watcherManager *watch.WatcherManager
-	eventNotifier  chan watch.WatchEvent
-}
-
-type KeyValue struct {
-	Key   string
-	Value string
-}
-
 func (kv *KvServer) GetCurrentRevesion() int64 {
-	return kv.currentRev
+	return kv.mvcc.CurrentRev()
 }
 
 func (kv *KvServer) GetRaft() *raft.Raft {
 	return kv.rf
 }
 
-// 仅 leader 扫描，发现到期后通过 Raft 提交 Expire 命令。
+// 仅 leader 扫描过期 lease，通过 Raft 提交 Expire 命令确保集群一致。
 func (kv *KvServer) leaseExpireWorker() {
-	ticker := time.NewTicker(300 * time.Millisecond)
+	ticker := time.NewTicker(kv.cfg.Lease.CheckInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -67,41 +34,82 @@ func (kv *KvServer) leaseExpireWorker() {
 			continue
 		}
 		now := time.Now().Unix()
-		expiredKeys := kv.leaseMgr.ExpiredKeys(now)
+		leases := kv.leaseMgr.ExpiredLeases(now)
 
-		for _, key := range expiredKeys {
-			op := &proto.Op{Type: "Expire", Key: key}
-			data, _ := po.Marshal(op)
-			kv.rf.Start(data)
+		for _, lease := range leases {
+			for key := range lease.Keys {
+				op := &proto.Op{Type: "Expire", Key: key}
+				data, _ := po.Marshal(op)
+				kv.rf.Start(data)
+			}
 		}
 	}
 }
 
-func MakeKVServer(peers []string, me int, dataDir string) *KvServer {
-	applych := make(chan raft.ApplyMsg)
-
-	kv := &KvServer{}
-	path := fmt.Sprintf("dataDir/node-%d", me)
+func MakeKVServer(cfg *config.Config) *KvServer {
+	kv := &KvServer{cfg: cfg}
+	path := fmt.Sprintf("%s/node-%d", cfg.Node.DataDir, cfg.Node.ID)
 	os.MkdirAll(path, 0755)
 
 	store, err := db.NewStore(path)
 	if err != nil {
 		panic(err)
 	}
-	kv.store = store
-	kv.applyCh = applych
-	kv.rf = raft.MakeRaft(applych, peers, int32(me))
-	kv.waitCh = make(map[int64]chan result)
-	kv.lastRequest = make(map[int64]int64)
-	kv.getCh = make(map[int64]chan result)
-	kv.lastResult = make(map[int]result)
-	kv.history = make(map[string][]int64)
-	kv.latest = make(map[string]int64)
-	kv.leaseMgr = lease.NewLeaseManager(1 * time.Second)
 
-	kv.watcherManager = watch.NewWatcherManager()
+	//初始化mvcc相关
+	kv.InitMvcc(store)
+
+	kv.leaseMgr = lease.NewLeaseManager(cfg.Lease.MinTTL)
+	// 初始化kv相关
+	kv.InitKvserver(cfg.Peers(), cfg.Node.ID)
+	//初始化watch相关
+	kv.InitWatch()
+
 	go kv.applier() //循环执行命令
 	go kv.leaseExpireWorker()
+	go kv.snapshotWorker()
 
 	return kv
+}
+
+// 初始化mvcc相关
+func (kv *KvServer) InitMvcc(store *db.Store) {
+
+	//新建mvcc
+	kv.mvcc = mvcc.New(store)
+	//从badger中恢复数据
+	if err := kv.mvcc.Recover(); err != nil {
+		panic(err)
+	}
+	// 启动后台compact
+	kv.mvcc.StartCompact(kv.cfg.KV.CompactInterval)
+}
+
+// 初始化watch相关
+func (kv *KvServer) InitWatch() {
+	//注册watch管理
+	kv.watcherManager = watch.NewWatcherManager()
+}
+
+// 初始化kv相关
+func (kv *KvServer) InitKvserver(peers []string, me int) {
+	applych := make(chan raft.ApplyMsg)
+	//提交请求管道
+	kv.applyCh = applych
+	//raft
+	kv.rf = raft.MakeRaft(applych, peers, int32(me), raft.RaftConfig{
+		ElectionTimeoutMin: kv.cfg.Raft.ElectionTimeoutMin,
+		ElectionTimeoutMax: kv.cfg.Raft.ElectionTimeoutMax,
+		HeartbeatInterval:  kv.cfg.Raft.HeartbeatInterval,
+		RPCTimeout:         kv.cfg.Raft.RPCTimeout,
+		ReadIndexTimeout:   kv.cfg.Raft.ReadIndexTimeout,
+	})
+	//put请求通道
+	kv.waitCh = make(map[int64]chan result)
+	//clientid上次请求表
+	kv.lastRequest = make(map[int64]int64)
+	//get请求通道
+	kv.getCh = make(map[int64]chan result)
+	//requestid对应请求结果
+	kv.lastResult = make(map[int]result)
 }
