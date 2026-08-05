@@ -7,10 +7,6 @@ import (
 	"github.com/dgraph-io/badger/v4"
 )
 
-type Store struct {
-	DB *badger.DB
-}
-
 func NewStore(path string) (*Store, error) {
 	opts := badger.DefaultOptions(path)
 
@@ -57,11 +53,109 @@ func (s *Store) Get(key string) (types.Value, error) {
 
 	return val, err
 }
+
 func (s *Store) Delete(key string) error {
 	return s.DB.Update(func(txn *badger.Txn) error {
 		return txn.Delete([]byte(key))
 	})
 }
+
+// DropAll 清空所有数据，用于快照恢复时重建状态。
+func (s *Store) DropAll() error {
+	return s.DB.DropAll()
+}
+
 func (s *Store) Close() error {
 	return s.DB.Close()
+}
+
+func (s *Store) PrefixScan(prefix string) ([]ScanResult, error) {
+
+	result := make([]ScanResult, 0)
+
+	err := s.DB.View(func(txn *badger.Txn) error {
+
+		opts := badger.DefaultIteratorOptions
+
+		opts.Prefix = []byte(prefix)
+
+		iter := txn.NewIterator(opts)
+
+		defer iter.Close()
+
+		for iter.Seek([]byte(prefix)); iter.Valid(); iter.Next() {
+
+			item := iter.Item()
+
+			value, err := item.ValueCopy(nil)
+
+			if err != nil {
+				return err
+			}
+
+			var v types.Value
+			if err := json.Unmarshal(value, &v); err != nil {
+				continue
+			}
+			result = append(result, ScanResult{
+				Key:     string(item.Key()),
+				Value:   v.Value,
+				Version: v.Version,
+				Deleted: v.Deleted,
+			})
+		}
+		return nil
+	})
+
+	return result, err
+}
+
+func (s *Store) ScanAll() ([]ScanResult, error) {
+	result := make([]ScanResult, 0)
+	err := s.DB.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		iter := txn.NewIterator(opts)
+
+		defer iter.Close()
+		for iter.Rewind(); iter.Valid(); iter.Next() {
+			item := iter.Item()
+			value, err := item.ValueCopy(nil)
+
+			if err != nil {
+				return err
+			}
+			var v types.Value
+			if err := json.Unmarshal(value, &v); err != nil {
+				continue
+			}
+
+			result = append(result, ScanResult{
+				Key:     string(item.Key()),
+				Value:   v.Value,
+				Version: v.Version,
+				Deleted: v.Deleted,
+			})
+		}
+		return nil
+	})
+	return result, err
+}
+
+// 批量删除建
+func (s *Store) BatchDelete(keys []string) error {
+
+	return s.DB.Update(func(txn *badger.Txn) error {
+
+		for _, key := range keys {
+
+			err := txn.Delete([]byte(key))
+
+			if err != nil {
+				return err
+			}
+
+		}
+
+		return nil
+	})
 }
