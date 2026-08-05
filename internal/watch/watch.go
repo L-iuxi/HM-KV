@@ -1,35 +1,5 @@
 package watch
 
-import (
-	"fmt"
-	"sync"
-)
-
-// 一次变化事件
-type WatchEvent struct {
-	Key      string //建
-	Value    string //值
-	Type     string //修改类型
-	Revision int64  //版本号
-}
-
-// 一个监听者，监听一个key
-type Watcher struct {
-	Key            string          //被监听的建
-	Id             int64           //监听者id
-	StartReversion int64           //客户端想从哪个版本开始看
-	NextReversion  int64           //watch监听期待的下一个版本
-	Ch             chan WatchEvent //通知管道
-}
-
-// 管理所有监听者
-type WatcherManager struct {
-	mu            sync.RWMutex                  //锁
-	nextWatcherId int64                         //下一个新监听者的id
-	synced        map[string]map[int64]*Watcher //已经同步的watch
-	unsynced      map[string]map[int64]*Watcher
-	//      map[string]map[int64]*Watcher //某个key下面的监听者们
-}
 
 // 新建监听管理者
 func NewWatcherManager() *WatcherManager {
@@ -37,7 +7,41 @@ func NewWatcherManager() *WatcherManager {
 		nextWatcherId: 1,
 		synced:        make(map[string]map[int64]*Watcher),
 		unsynced:      make(map[string]map[int64]*Watcher),
+		syncedroot:    NewTree(),
+		unsyncedroot:  NewTree(),
 	}
+}
+
+// 注册监听，按情况分发
+func (wm *WatcherManager) Register(key string, prefix bool, startrev int64, currev int64) *Watcher {
+	if prefix {
+		isSync := startrev >= currev || startrev == 0
+
+		next := currev + 1
+		if !isSync {
+			next = currev
+		}
+
+		wm.mu.Lock()
+		w := &Watcher{
+			Key:            key,
+			Id:             wm.nextWatcherId,
+			StartReversion: startrev,
+			NextReversion:  next,
+			Ch:             make(chan WatchEvent, 100),
+		}
+		wm.nextWatcherId++
+
+		if isSync {
+			wm.Insert(wm.syncedroot, key, w)
+		} else {
+			wm.Insert(wm.unsyncedroot, key, w)
+		}
+		wm.mu.Unlock()
+
+		return w
+	}
+	return wm.AddWatcher(key, startrev, currev)
 }
 
 // 添加到监听表中
@@ -53,8 +57,8 @@ func (wm *WatcherManager) AddWatcher(key string, startrev int64, currev int64) *
 	defer wm.mu.Unlock()
 
 	next := currev + 1
-	if startrev > 0 || startrev <= currev {
-		next = currev
+	if !sync {
+		next = currev // unsynced: needs catch-up to current
 	}
 	w := &Watcher{
 		Key:            key,
@@ -88,23 +92,24 @@ func (wm *WatcherManager) Notify(event WatchEvent) {
 	wm.mu.RLock()
 	list := make([]*Watcher, 0)
 
-	//复制一份发送
+	//精确匹配
 	for _, w := range wm.synced[event.Key] {
 		list = append(list, w)
 	}
+	//前缀匹配（synced + unsynced）
+	list = append(list, wm.Match(wm.syncedroot, event.Key)...)
+	list = append(list, wm.Match(wm.unsyncedroot, event.Key)...)
 	wm.mu.RUnlock()
-
-	fmt.Println("notify watcher:", event.Key)
 
 	for _, w := range list {
 
 		//非阻塞发送给所有监听该建的客户端
 		select {
 		case w.Ch <- event:
-			fmt.Println("send event to watcher")
 			w.NextReversion = event.Revision + 1
 		default:
-			fmt.Println("watcher channel full")
+			// 客户端消费太慢，解除注册防止泄漏和 panic
+			wm.RemoveWatch(w.Key, w.Id)
 		}
 	}
 }
@@ -116,19 +121,25 @@ func (wm *WatcherManager) RemoveWatch(key string, id int64) {
 	defer wm.mu.Unlock()
 
 	if watcher, ok := wm.synced[key]; ok {
-		if _, ok := watcher[id]; ok {
+		if w, ok := watcher[id]; ok {
+			close(w.Ch)
 			delete(watcher, id)
 			return
 		}
 	}
 	if watcher, ok := wm.unsynced[key]; ok {
-		if _, ok := watcher[id]; ok {
+		if w, ok := watcher[id]; ok {
+			close(w.Ch)
 			delete(watcher, id)
 			return
 		}
 	}
+	// 前缀 trie 里也可能有
+	wm.Remove(wm.syncedroot, key, id)
+	wm.Remove(wm.unsyncedroot, key, id)
 }
 
+// 同步
 func (wm *WatcherManager) MoveToSynced(key string, id int64) {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
@@ -142,4 +153,15 @@ func (wm *WatcherManager) MoveToSynced(key string, id int64) {
 			wm.synced[key][id] = w
 		}
 	}
+}
+
+// 删除后同步
+func (wm *WatcherManager) Compact(revsion int64) {
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
+	wm.compactversion = revsion
+}
+
+func (wm *WatcherManager) GetCompactRevision() int64 {
+	return wm.compactversion
 }
