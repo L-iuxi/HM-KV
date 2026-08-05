@@ -1,27 +1,6 @@
 package lease
 
-import (
-	"errors"
-	"sync"
-	"time"
-)
-
-var errLeaseNotFound = errors.New("lease not found")
-
-type Lease struct {
-	ID        int64
-	TTL       int64 // second
-	ExpiresAt int64 // unix second
-	Key       string
-}
-
-type LeaseManager struct {
-	sync.RWMutex
-	leases      map[int64]*Lease
-	keyToLease  map[string]int64
-	nextLeaseID int64
-	minLeaseTTL int64
-}
+import "time"
 
 func NewLeaseManager(minLeaseTTL time.Duration) *LeaseManager {
 	minTTL := int64(minLeaseTTL.Seconds())
@@ -36,8 +15,8 @@ func NewLeaseManager(minLeaseTTL time.Duration) *LeaseManager {
 	}
 }
 
-// BindOrRefresh 实现 1:1 key->lease。
-func (lm *LeaseManager) BindOrRefresh(key string, ttl, now int64) int64 {
+// 创建新租约
+func (lm *LeaseManager) Grant(ttl int64, now int64) int64 {
 	lm.Lock()
 	defer lm.Unlock()
 
@@ -45,44 +24,82 @@ func (lm *LeaseManager) BindOrRefresh(key string, ttl, now int64) int64 {
 		ttl = lm.minLeaseTTL
 	}
 
-	if id, ok := lm.keyToLease[key]; ok {
-		l := lm.leases[id]
-		l.TTL = ttl
-		l.ExpiresAt = now + ttl
-		return id
-	}
-
 	id := lm.nextLeaseID
 	lm.nextLeaseID++
-	lm.leases[id] = &Lease{ID: id, TTL: ttl, ExpiresAt: now + ttl, Key: key}
-	lm.keyToLease[key] = id
+
+	lea := &Lease{ID: id,
+		TTL:       ttl,
+		ExpiresAt: now + ttl,
+		Keys:      make(map[string]struct{}),
+	}
+
+	lm.leases[id] = lea
 	return id
+
 }
 
-func (lm *LeaseManager) ExpiredKeys(now int64) []string {
+// 把建绑定到id上
+func (lm *LeaseManager) Attach(key string, leaseID int64) error {
+	lm.Lock()
+	defer lm.Unlock()
+
+	lease, ok := lm.leases[leaseID]
+	if !ok {
+		return errLeaseNotFound
+	}
+
+	lease.Keys[key] = struct{}{}
+
+	lm.keyToLease[key] = leaseID
+
+	return nil
+}
+
+// 寻找过期建
+func (lm *LeaseManager) ExpiredLeases(now int64) []*Lease {
 	lm.RLock()
 	defer lm.RUnlock()
-	ret := make([]string, 0)
+
+	ret := make([]*Lease, 0)
+
 	for _, lease := range lm.leases {
 		if lease.ExpiresAt <= now {
-			ret = append(ret, lease.Key)
+			ret = append(ret, lease)
 		}
 	}
 	return ret
 }
 
-func (lm *LeaseManager) RemoveKey(key string) error {
+// 移除过期建
+func (lm *LeaseManager) RemoveLease(id int64) error {
 	lm.Lock()
 	defer lm.Unlock()
-	id, ok := lm.keyToLease[key]
+	lease, ok := lm.leases[id]
 	if !ok {
 		return errLeaseNotFound
 	}
-	delete(lm.keyToLease, key)
+	// 删除key反向索引
+	for key := range lease.Keys {
+		delete(lm.keyToLease, key)
+	}
+	// 删除lease
 	delete(lm.leases, id)
+
 	return nil
 }
 
+// 根据 key 查找 leaseID
+func (lm *LeaseManager) GetLeaseIDByKey(key string) (int64, error) {
+	lm.RLock()
+	defer lm.RUnlock()
+	id, ok := lm.keyToLease[key]
+	if !ok {
+		return 0, errLeaseNotFound
+	}
+	return id, nil
+}
+
+// 续约
 func (lm *LeaseManager) KeepAliveByKey(key string, now int64) error {
 	lm.Lock()
 	defer lm.Unlock()
