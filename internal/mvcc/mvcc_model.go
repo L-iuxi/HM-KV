@@ -3,6 +3,7 @@ package mvcc
 import (
 	"TicketX/internal/db"
 	"sync"
+	"time"
 )
 
 type MVCC struct {
@@ -11,7 +12,15 @@ type MVCC struct {
 	currentRev int64              //全局版本
 	latest     map[string]int64   //每个建的最新版本
 	history    map[string][]int64 //每个建的历史版本
+	revisions  []RevisionEntry    //每个版本都修改了什么建
 	compactrev int64              //删除位置
+	stop       chan struct{}      //停止compact
+}
+
+// 建和它被修改的版本
+type RevisionEntry struct {
+	Key      string
+	Revision int64
 }
 
 // KeyValue 前缀扫描结果
@@ -31,4 +40,11 @@ type Engine interface {
 	GetLatest(key string) (int64, bool)
 	GetHistory(key string) []int64
 	CurrentRev() int64
+
+	// 快照
+	Serialize() ([]byte, error)
+	Deserialize(data []byte) error
+
+	// 后台 compact
+	StartCompact(interval time.Duration)
 }
