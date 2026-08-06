@@ -1,177 +1,83 @@
+// Package clerk provides a client SDK for the HMETCD distributed KV store.
 package clerk
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 
+	"TicketX/proto"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"TicketX/proto" // 引入生成的 protobuf 包
 )
 
-type Clerk struct {
-	Clients   []proto.KvClient
-	Leader    int //当前认为的leader
-	ClientId  int64
-	RequestId int64
-}
-
-func NewClerk() *Clerk {
-	addrs := []string{
-		"localhost:50051",
-		"localhost:50052",
-		"localhost:50053",
-		"localhost:50054",
-		"localhost:50055",
+func New(addrs []string) (*Client, error) {
+	if len(addrs) == 0 {
+		return nil, errors.New("clerk: at least one address required")
 	}
 
-	clients := make([]proto.KvClient, len(addrs))
+	c := &Client{
+		addrs:    addrs,
+		conns:    make([]*grpc.ClientConn, len(addrs)),
+		kvcs:     make([]proto.KvClient, len(addrs)),
+		clientID: rand.Int63(),
+	}
 
 	for i, addr := range addrs {
-		conn, err := grpc.Dial(
-			addr,
+		conn, err := grpc.NewClient(addr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 		if err != nil {
-			panic(err)
+			c.Close()
+			return nil, fmt.Errorf("clerk: dial %s: %w", addr, err)
 		}
-		clients[i] = proto.NewKvClient(conn)
+		c.conns[i] = conn
+		c.kvcs[i] = proto.NewKvClient(conn)
 	}
 
-	return &Clerk{
-		Clients:   clients,
-		Leader:    0,
-		ClientId:  rand.Int63(),
-		RequestId: 1,
-	}
+	c.leaderIdx.Store(0)
+	c.knownLeader.Store(-1)
+	c.requestID.Store(1)
+	return c, nil
 }
 
-func TPut(ck *Clerk, key, value string) {
-	ck.RequestId++
-	req := &proto.PutRequest{
-		Key:       key,
-		Value:     value,
-		RequestId: ck.RequestId,
-		ClientId:  ck.ClientId,
-	}
-
-	for {
-		reply, err := ck.Clients[ck.Leader].Put(context.Background(), req)
-
-		if err != nil {
-			continue
-		}
-
-		switch reply.Error {
-		case proto.ErrorType_OK:
-			fmt.Println("PUT SUCCESS on leader", ck.Leader)
-			return
-
-		case proto.ErrorType_WRONG_LEADER:
-			ck.Leader = int(reply.LeaderId)
-			fmt.Println("wrong leader → switch", ck.Leader)
-
-		default:
-			fmt.Println("internal error or retry")
-		}
-	}
-}
-func TGet(ck *Clerk, key string) {
-	ck.RequestId++
-	req := &proto.GetRequest{
-		Key:       key,
-		RequestId: ck.RequestId,
-		ClientId:  ck.ClientId,
-	}
-
-	for {
-		reply, err := ck.Clients[ck.Leader].Get(context.Background(), req)
-		if err != nil {
-			continue
-		}
-
-		switch reply.Error {
-		case proto.ErrorType_OK:
-			fmt.Println("GET SUCCESS,VALUE is", reply.Value)
-			return
-
-		case proto.ErrorType_WRONG_LEADER:
-			ck.Leader = int(reply.LeaderId)
-			fmt.Println("wrong leader → switch", ck.Leader)
-		case proto.ErrorType_KEY_NOT_EXIST:
-			fmt.Println("THIS KEY IS NOT EXIST")
-		default:
-			fmt.Println("internal error or retry")
-		}
-	}
-}
-func TWatch(ck *Clerk, key string) {
-	req := &proto.WatchRequest{
-		Key: key,
-	}
-
-	for {
-
-		stream, err := ck.Clients[ck.Leader].
-			Watch(context.Background(), req)
-
-		if err != nil {
-
-			fmt.Println("watch rpc error:", err)
-
-			continue
-		}
-
-		fmt.Println(
-			"watch start on leader",
-			ck.Leader,
-		)
-
-		for {
-
-			resp, err := stream.Recv()
-
-			if err != nil {
-
-				fmt.Println(
-					"watch stream closed:",
-					err,
-				)
-
-				break
-			}
-
-			switch resp.Err {
-
-			case proto.ErrorType_OK:
-
-				fmt.Printf(
-					"[WATCH] type=%s key=%s value=%s revision=%d\n",
-					resp.Type,
-					resp.Key,
-					resp.Value,
-					resp.Revision,
-				)
-
-			case proto.ErrorType_WRONG_LEADER:
-
-				ck.Leader = int(resp.LeaderId)
-
-				fmt.Println(
-					"wrong leader -> switch to",
-					ck.Leader,
-				)
-
-				break
-
-			default:
-
-				fmt.Println(
-					"watch internal error",
-				)
+func (c *Client) Close() error {
+	var errs []error
+	for _, conn := range c.conns {
+		if conn != nil {
+			if err := conn.Close(); err != nil {
+				errs = append(errs, err)
 			}
 		}
 	}
+	if len(errs) > 0 {
+		return fmt.Errorf("clerk: close errors: %v", errs)
+	}
+	return nil
+}
+
+// 下一个requestid
+func (c *Client) nextID() int64 {
+	return c.requestID.Add(1)
+}
+
+// 找新leader：优先用 knownLeader 提示，否则顺序探测
+func (c *Client) tryNextLeader(current int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if int(c.leaderIdx.Load()) != current {
+		return // 已被其他请求切换
+	}
+
+	// 优先尝试已知 leader（从 WRONG_LEADER 响应学到的）
+	known := c.knownLeader.Load()
+	if known >= 0 && int(known) != current && int(known) < len(c.addrs) {
+		c.leaderIdx.Store(int32(known))
+		return
+	}
+
+	// 已知 leader 不可用或就是当前节点，顺序探测下一个
+	next := (current + 1) % len(c.addrs)
+	c.leaderIdx.Store(int32(next))
 }

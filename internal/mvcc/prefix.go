@@ -38,7 +38,7 @@ func (mvcc *MVCC) PrefixScan(prefix string) ([]KeyValue, error) {
 		if entry.deleted {
 			continue
 		}
-		kvs = append(kvs, KeyValue{Key: key, Value: entry.value})
+		kvs = append(kvs, KeyValue{Key: key, Value: entry.value, Version: entry.version})
 	}
 
 	return kvs, nil

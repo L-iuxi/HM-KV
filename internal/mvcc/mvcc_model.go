@@ -25,8 +25,9 @@ type RevisionEntry struct {
 
 // KeyValue 前缀扫描结果
 type KeyValue struct {
-	Key   string
-	Value string
+	Key     string
+	Value   string
+	Version int64
 }
 
 type Engine interface {
