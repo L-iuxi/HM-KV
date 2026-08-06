@@ -252,10 +252,12 @@ func (kv *KvServer) HandleBatch(op *proto.Op) result {
 }
 
 func (kv *KvServer) expireByKey(key string) {
+	fmt.Printf("[lease] expireByKey: key=%s\n", key)
 	rev := kv.mvcc.Delete(key)
 	id, err := kv.leaseMgr.GetLeaseIDByKey(key)
 	if err == nil {
 		_ = kv.leaseMgr.RemoveLease(id)
+		fmt.Printf("[lease] expireByKey: removed lease %d for key %s\n", id, key)
 	}
 	kv.watcherManager.Notify(watch.WatchEvent{
 		Type:     "Delete",

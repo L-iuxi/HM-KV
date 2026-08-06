@@ -37,10 +37,15 @@ func (kv *KvServer) leaseExpireWorker() {
 		leases := kv.leaseMgr.ExpiredLeases(now)
 
 		for _, lease := range leases {
+			fmt.Printf("[lease] expire lease %d (expired at %d, now %d, keys=%v)\n",
+				lease.ID, lease.ExpiresAt, now, lease.Keys)
 			for key := range lease.Keys {
 				op := &proto.Op{Type: "Expire", Key: key}
 				data, _ := po.Marshal(op)
-				kv.rf.Start(data)
+				_, _, isLeader, _ := kv.rf.Start(data)
+				if !isLeader {
+					fmt.Printf("[lease] expire lease %d key %s: lost leadership\n", lease.ID, key)
+				}
 			}
 		}
 	}
