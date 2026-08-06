@@ -1,0 +1,25 @@
+node:
+  id: 1
+  data_dir: data
+
+server:
+  address: ":50052"
+
+raft:
+  peers:
+    - "localhost:50051"
+    - "localhost:50052"
+    - "localhost:50053"
+  election_timeout_min: 150ms
+  election_timeout_max: 300ms
+  heartbeat_interval: 50ms
+  rpc_timeout: 200ms
+  read_index_timeout: 500ms
+
+kv:
+  apply_batch_interval: 5ms
+  compact_interval: 1m
+
+lease:
+  check_interval: 300ms
+  min_ttl: 1s
