@@ -15,6 +15,7 @@ import (
 type result struct {
 	Value   string
 	Version int64
+	LeaseID int64
 	Err     proto.ErrorType
 }
 

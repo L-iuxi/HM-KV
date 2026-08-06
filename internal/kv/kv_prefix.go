@@ -15,8 +15,9 @@ func (kv *KvServer) readByPrefix(prefix string) (*proto.GetReply, error) {
 	var result []*proto.KeyValue
 	for _, entry := range kvs {
 		result = append(result, &proto.KeyValue{
-			Key:   entry.Key,
-			Value: entry.Value,
+			Key:     entry.Key,
+			Value:   entry.Value,
+			Version: entry.Version,
 		})
 	}
 
@@ -30,7 +31,7 @@ func (kv *KvServer) readByPrefix(prefix string) (*proto.GetReply, error) {
 func toProto(kvs []mvcc.KeyValue) []*proto.KeyValue {
 	var result []*proto.KeyValue
 	for _, kv := range kvs {
-		result = append(result, &proto.KeyValue{Key: kv.Key, Value: kv.Value})
+		result = append(result, &proto.KeyValue{Key: kv.Key, Value: kv.Value, Version: kv.Version})
 	}
 	return result
 }

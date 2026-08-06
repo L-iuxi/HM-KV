@@ -31,7 +31,7 @@ func (kv *KvServer) Get(ctx context.Context, req *proto.GetRequest) (*proto.GetR
 		if err == nil {
 			return &proto.GetReply{
 				Error:   proto.ErrorType_OK,
-				Kvs:     []*proto.KeyValue{{Key: req.Key, Value: value}},
+				Kvs:     []*proto.KeyValue{{Key: req.Key, Value: value, Version: rev}},
 				Version: rev,
 			}, nil
 		}
@@ -65,7 +65,7 @@ func (kv *KvServer) Get(ctx context.Context, req *proto.GetRequest) (*proto.GetR
 
 	var kvs []*proto.KeyValue
 	if res.Err == proto.ErrorType_OK {
-		kvs = []*proto.KeyValue{{Key: op.Key, Value: res.Value}}
+		kvs = []*proto.KeyValue{{Key: op.Key, Value: res.Value, Version: res.Version}}
 	}
 	return &proto.GetReply{
 		Error:   res.Err,

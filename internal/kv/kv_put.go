@@ -15,6 +15,7 @@ func (kv *KvServer) Put(ctx context.Context, req *proto.PutRequest) (*proto.PutR
 		Value:           req.Value,
 		ExpectedVersion: req.ExpectedVersion,
 		ExpireAt:        req.ExpireAt,
+		LeaseId:         req.LeaseId,
 		ClientId:        req.ClientId,
 		RequestId:       req.RequestId,
 	}

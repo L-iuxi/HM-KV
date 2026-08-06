@@ -43,3 +43,38 @@ func (kv *KvServer) HandleKeepAlive(op *proto.Op) result {
 	}
 	return result{Err: proto.ErrorType_OK}
 }
+
+// Grant 创建新 lease，返回 lease ID
+func (kv *KvServer) Grant(ctx context.Context, req *proto.GrantRequest) (*proto.GrantReply, error) {
+	op := &proto.Op{
+		Type:     "Grant",
+		ExpireAt: req.Ttl,
+	}
+	data, _ := po.Marshal(op)
+	index, _, isleader, leader := kv.rf.Start(data)
+	if !isleader {
+		return &proto.GrantReply{
+			Error:    proto.ErrorType_WRONG_LEADER,
+			LeaderId: leader,
+		}, nil
+	}
+
+	ch := make(chan result, 1)
+	kv.mu.Lock()
+	kv.waitCh[int64(index)] = ch
+	kv.mu.Unlock()
+
+	res := <-ch
+
+	return &proto.GrantReply{
+		Error:   res.Err,
+		LeaseId: res.LeaseID,
+	}, nil
+}
+
+// HandleGrant 创建 lease（Raft apply）
+func (kv *KvServer) HandleGrant(op *proto.Op) result {
+	now := time.Now().Unix()
+	leaseID := kv.leaseMgr.Grant(op.ExpireAt, now)
+	return result{Err: proto.ErrorType_OK, LeaseID: leaseID}
+}

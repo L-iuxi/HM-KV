@@ -65,7 +65,13 @@ func (kv *KvServer) applyBatch(msg []raft.ApplyMsg) {
 					}
 					delete(kv.waitCh, m.CommandIndex)
 				
-			case "Get":
+			case "Grant":
+					res := kv.HandleGrant(&op)
+					if ch, ok := kv.waitCh[m.CommandIndex]; ok {
+						ch <- res
+					}
+					delete(kv.waitCh, m.CommandIndex)
+				case "Get":
 				if ch, ok := kv.getCh[m.CommandIndex]; ok {
 					result := kv.HandleGet(&op)
 					ch <- result
@@ -133,8 +139,11 @@ func (kv *KvServer) HandlePut(op *proto.Op) result{
 
 	kv.lastRequest[op.ClientId] = op.RequestId //记录该clientid最后一个请求结果
 
-	// 如果带过期时间，创建 lease 并绑定 key
-	if op.ExpireAt != 0 {
+	// 如果指定了已有 lease，直接绑定（多 key 共享 lease）
+	if op.LeaseId != 0 {
+		_ = kv.leaseMgr.Attach(op.Key, op.LeaseId)
+	} else if op.ExpireAt != 0 {
+		// 带 TTL：创建新 lease 并绑定
 		now := time.Now().Unix()
 		leaseID := kv.leaseMgr.Grant(op.ExpireAt, now)
 		_ = kv.leaseMgr.Attach(op.Key, leaseID)
