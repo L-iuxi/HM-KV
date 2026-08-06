@@ -26,6 +26,7 @@ const (
 	Kv_Watch_FullMethodName     = "/proto.Kv/Watch"
 	Kv_Compact_FullMethodName   = "/proto.Kv/Compact"
 	Kv_KeepAlive_FullMethodName = "/proto.Kv/KeepAlive"
+	Kv_Grant_FullMethodName     = "/proto.Kv/Grant"
 )
 
 // KvClient is the client API for Kv service.
@@ -41,6 +42,7 @@ type KvClient interface {
 	Watch(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchResponse], error)
 	Compact(ctx context.Context, in *CompactRequest, opts ...grpc.CallOption) (*CompactReply, error)
 	KeepAlive(ctx context.Context, in *KeepAliveRequest, opts ...grpc.CallOption) (*KeepAliveReply, error)
+	Grant(ctx context.Context, in *GrantRequest, opts ...grpc.CallOption) (*GrantReply, error)
 }
 
 type kvClient struct {
@@ -130,6 +132,16 @@ func (c *kvClient) KeepAlive(ctx context.Context, in *KeepAliveRequest, opts ...
 	return out, nil
 }
 
+func (c *kvClient) Grant(ctx context.Context, in *GrantRequest, opts ...grpc.CallOption) (*GrantReply, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GrantReply)
+	err := c.cc.Invoke(ctx, Kv_Grant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // KvServer is the server API for Kv service.
 // All implementations must embed UnimplementedKvServer
 // for forward compatibility.
@@ -143,6 +155,7 @@ type KvServer interface {
 	Watch(*WatchRequest, grpc.ServerStreamingServer[WatchResponse]) error
 	Compact(context.Context, *CompactRequest) (*CompactReply, error)
 	KeepAlive(context.Context, *KeepAliveRequest) (*KeepAliveReply, error)
+	Grant(context.Context, *GrantRequest) (*GrantReply, error)
 	mustEmbedUnimplementedKvServer()
 }
 
@@ -173,6 +186,9 @@ func (UnimplementedKvServer) Compact(context.Context, *CompactRequest) (*Compact
 }
 func (UnimplementedKvServer) KeepAlive(context.Context, *KeepAliveRequest) (*KeepAliveReply, error) {
 	return nil, status.Error(codes.Unimplemented, "method KeepAlive not implemented")
+}
+func (UnimplementedKvServer) Grant(context.Context, *GrantRequest) (*GrantReply, error) {
+	return nil, status.Error(codes.Unimplemented, "method Grant not implemented")
 }
 func (UnimplementedKvServer) mustEmbedUnimplementedKvServer() {}
 func (UnimplementedKvServer) testEmbeddedByValue()            {}
@@ -314,6 +330,24 @@ func _Kv_KeepAlive_Handler(srv interface{}, ctx context.Context, dec func(interf
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Kv_Grant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GrantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KvServer).Grant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Kv_Grant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KvServer).Grant(ctx, req.(*GrantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Kv_ServiceDesc is the grpc.ServiceDesc for Kv service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -344,6 +378,10 @@ var Kv_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "KeepAlive",
 			Handler:    _Kv_KeepAlive_Handler,
+		},
+		{
+			MethodName: "Grant",
+			Handler:    _Kv_Grant_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -233,7 +233,8 @@ type PutRequest struct {
 	RequestId       int64                  `protobuf:"varint,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	ClientId        int64                  `protobuf:"varint,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	ExpectedVersion int64                  `protobuf:"varint,5,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
-	ExpireAt        int64                  `protobuf:"varint,6,opt,name=expire_at,json=expireAt,proto3" json:"expire_at,omitempty"` //过期时间
+	ExpireAt        int64                  `protobuf:"varint,6,opt,name=expire_at,json=expireAt,proto3" json:"expire_at,omitempty"` //TTL 秒数，自动创建 lease 并绑定
+	LeaseId         int64                  `protobuf:"varint,7,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`    //绑定到已有 lease，优先级高于 expire_at
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -306,6 +307,13 @@ func (x *PutRequest) GetExpectedVersion() int64 {
 func (x *PutRequest) GetExpireAt() int64 {
 	if x != nil {
 		return x.ExpireAt
+	}
+	return 0
+}
+
+func (x *PutRequest) GetLeaseId() int64 {
+	if x != nil {
+		return x.LeaseId
 	}
 	return 0
 }
@@ -451,6 +459,7 @@ type KeyValue struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -497,6 +506,13 @@ func (x *KeyValue) GetValue() string {
 		return x.Value
 	}
 	return ""
+}
+
+func (x *KeyValue) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
 }
 
 type GetReply struct {
@@ -899,6 +915,111 @@ func (x *KeepAliveReply) GetLeaderId() int64 {
 	return 0
 }
 
+// grant 请求：创建 lease
+type GrantRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ttl           int64                  `protobuf:"varint,1,opt,name=ttl,proto3" json:"ttl,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GrantRequest) Reset() {
+	*x = GrantRequest{}
+	mi := &file_proto_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrantRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrantRequest) ProtoMessage() {}
+
+func (x *GrantRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrantRequest.ProtoReflect.Descriptor instead.
+func (*GrantRequest) Descriptor() ([]byte, []int) {
+	return file_proto_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GrantRequest) GetTtl() int64 {
+	if x != nil {
+		return x.Ttl
+	}
+	return 0
+}
+
+type GrantReply struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Error         ErrorType              `protobuf:"varint,1,opt,name=error,proto3,enum=proto.ErrorType" json:"error,omitempty"`
+	LeaderId      int64                  `protobuf:"varint,2,opt,name=leader_id,json=leaderId,proto3" json:"leader_id,omitempty"`
+	LeaseId       int64                  `protobuf:"varint,3,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GrantReply) Reset() {
+	*x = GrantReply{}
+	mi := &file_proto_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrantReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrantReply) ProtoMessage() {}
+
+func (x *GrantReply) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrantReply.ProtoReflect.Descriptor instead.
+func (*GrantReply) Descriptor() ([]byte, []int) {
+	return file_proto_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *GrantReply) GetError() ErrorType {
+	if x != nil {
+		return x.Error
+	}
+	return ErrorType_OK
+}
+
+func (x *GrantReply) GetLeaderId() int64 {
+	if x != nil {
+		return x.LeaderId
+	}
+	return 0
+}
+
+func (x *GrantReply) GetLeaseId() int64 {
+	if x != nil {
+		return x.LeaseId
+	}
+	return 0
+}
+
 type Entry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
@@ -911,7 +1032,7 @@ type Entry struct {
 
 func (x *Entry) Reset() {
 	*x = Entry{}
-	mi := &file_proto_service_proto_msgTypes[13]
+	mi := &file_proto_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -923,7 +1044,7 @@ func (x *Entry) String() string {
 func (*Entry) ProtoMessage() {}
 
 func (x *Entry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_service_proto_msgTypes[13]
+	mi := &file_proto_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -936,7 +1057,7 @@ func (x *Entry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Entry.ProtoReflect.Descriptor instead.
 func (*Entry) Descriptor() ([]byte, []int) {
-	return file_proto_service_proto_rawDescGZIP(), []int{13}
+	return file_proto_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Entry) GetType() string {
@@ -979,7 +1100,7 @@ type BatchRequest struct {
 
 func (x *BatchRequest) Reset() {
 	*x = BatchRequest{}
-	mi := &file_proto_service_proto_msgTypes[14]
+	mi := &file_proto_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -991,7 +1112,7 @@ func (x *BatchRequest) String() string {
 func (*BatchRequest) ProtoMessage() {}
 
 func (x *BatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_service_proto_msgTypes[14]
+	mi := &file_proto_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1004,7 +1125,7 @@ func (x *BatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BatchRequest.ProtoReflect.Descriptor instead.
 func (*BatchRequest) Descriptor() ([]byte, []int) {
-	return file_proto_service_proto_rawDescGZIP(), []int{14}
+	return file_proto_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *BatchRequest) GetEntries() []*Entry {
@@ -1039,7 +1160,7 @@ type BatchReply struct {
 
 func (x *BatchReply) Reset() {
 	*x = BatchReply{}
-	mi := &file_proto_service_proto_msgTypes[15]
+	mi := &file_proto_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1051,7 +1172,7 @@ func (x *BatchReply) String() string {
 func (*BatchReply) ProtoMessage() {}
 
 func (x *BatchReply) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_service_proto_msgTypes[15]
+	mi := &file_proto_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1064,7 +1185,7 @@ func (x *BatchReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BatchReply.ProtoReflect.Descriptor instead.
 func (*BatchReply) Descriptor() ([]byte, []int) {
-	return file_proto_service_proto_rawDescGZIP(), []int{15}
+	return file_proto_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *BatchReply) GetSuccess() bool {
@@ -1100,7 +1221,7 @@ type RequestVoteArgs struct {
 
 func (x *RequestVoteArgs) Reset() {
 	*x = RequestVoteArgs{}
-	mi := &file_proto_service_proto_msgTypes[16]
+	mi := &file_proto_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1112,7 +1233,7 @@ func (x *RequestVoteArgs) String() string {
 func (*RequestVoteArgs) ProtoMessage() {}
 
 func (x *RequestVoteArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_service_proto_msgTypes[16]
+	mi := &file_proto_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1125,7 +1246,7 @@ func (x *RequestVoteArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestVoteArgs.ProtoReflect.Descriptor instead.
 func (*RequestVoteArgs) Descriptor() ([]byte, []int) {
-	return file_proto_service_proto_rawDescGZIP(), []int{16}
+	return file_proto_service_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RequestVoteArgs) GetTerm() int32 {
@@ -1166,7 +1287,7 @@ type RequestVoteReply struct {
 
 func (x *RequestVoteReply) Reset() {
 	*x = RequestVoteReply{}
-	mi := &file_proto_service_proto_msgTypes[17]
+	mi := &file_proto_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1178,7 +1299,7 @@ func (x *RequestVoteReply) String() string {
 func (*RequestVoteReply) ProtoMessage() {}
 
 func (x *RequestVoteReply) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_service_proto_msgTypes[17]
+	mi := &file_proto_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1191,7 +1312,7 @@ func (x *RequestVoteReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestVoteReply.ProtoReflect.Descriptor instead.
 func (*RequestVoteReply) Descriptor() ([]byte, []int) {
-	return file_proto_service_proto_rawDescGZIP(), []int{17}
+	return file_proto_service_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RequestVoteReply) GetTerm() int32 {
@@ -1218,7 +1339,7 @@ type LogEntry struct {
 
 func (x *LogEntry) Reset() {
 	*x = LogEntry{}
-	mi := &file_proto_service_proto_msgTypes[18]
+	mi := &file_proto_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1230,7 +1351,7 @@ func (x *LogEntry) String() string {
 func (*LogEntry) ProtoMessage() {}
 
 func (x *LogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_service_proto_msgTypes[18]
+	mi := &file_proto_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1243,7 +1364,7 @@ func (x *LogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEntry.ProtoReflect.Descriptor instead.
 func (*LogEntry) Descriptor() ([]byte, []int) {
-	return file_proto_service_proto_rawDescGZIP(), []int{18}
+	return file_proto_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *LogEntry) GetTerm() int64 {
@@ -1274,7 +1395,7 @@ type HeartbeatArgs struct {
 
 func (x *HeartbeatArgs) Reset() {
 	*x = HeartbeatArgs{}
-	mi := &file_proto_service_proto_msgTypes[19]
+	mi := &file_proto_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1286,7 +1407,7 @@ func (x *HeartbeatArgs) String() string {
 func (*HeartbeatArgs) ProtoMessage() {}
 
 func (x *HeartbeatArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_service_proto_msgTypes[19]
+	mi := &file_proto_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1299,7 +1420,7 @@ func (x *HeartbeatArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatArgs.ProtoReflect.Descriptor instead.
 func (*HeartbeatArgs) Descriptor() ([]byte, []int) {
-	return file_proto_service_proto_rawDescGZIP(), []int{19}
+	return file_proto_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *HeartbeatArgs) GetLeaderId() int32 {
@@ -1355,7 +1476,7 @@ type HeartbeatReply struct {
 
 func (x *HeartbeatReply) Reset() {
 	*x = HeartbeatReply{}
-	mi := &file_proto_service_proto_msgTypes[20]
+	mi := &file_proto_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1367,7 +1488,7 @@ func (x *HeartbeatReply) String() string {
 func (*HeartbeatReply) ProtoMessage() {}
 
 func (x *HeartbeatReply) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_service_proto_msgTypes[20]
+	mi := &file_proto_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1380,7 +1501,7 @@ func (x *HeartbeatReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatReply.ProtoReflect.Descriptor instead.
 func (*HeartbeatReply) Descriptor() ([]byte, []int) {
-	return file_proto_service_proto_rawDescGZIP(), []int{20}
+	return file_proto_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *HeartbeatReply) GetSuccess() bool {
@@ -1417,7 +1538,7 @@ type InstallSnapshotArgs struct {
 
 func (x *InstallSnapshotArgs) Reset() {
 	*x = InstallSnapshotArgs{}
-	mi := &file_proto_service_proto_msgTypes[21]
+	mi := &file_proto_service_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1429,7 +1550,7 @@ func (x *InstallSnapshotArgs) String() string {
 func (*InstallSnapshotArgs) ProtoMessage() {}
 
 func (x *InstallSnapshotArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_service_proto_msgTypes[21]
+	mi := &file_proto_service_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1442,7 +1563,7 @@ func (x *InstallSnapshotArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstallSnapshotArgs.ProtoReflect.Descriptor instead.
 func (*InstallSnapshotArgs) Descriptor() ([]byte, []int) {
-	return file_proto_service_proto_rawDescGZIP(), []int{21}
+	return file_proto_service_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *InstallSnapshotArgs) GetTerm() int32 {
@@ -1489,7 +1610,7 @@ type InstallSnapshotReply struct {
 
 func (x *InstallSnapshotReply) Reset() {
 	*x = InstallSnapshotReply{}
-	mi := &file_proto_service_proto_msgTypes[22]
+	mi := &file_proto_service_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1501,7 +1622,7 @@ func (x *InstallSnapshotReply) String() string {
 func (*InstallSnapshotReply) ProtoMessage() {}
 
 func (x *InstallSnapshotReply) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_service_proto_msgTypes[22]
+	mi := &file_proto_service_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1514,7 +1635,7 @@ func (x *InstallSnapshotReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstallSnapshotReply.ProtoReflect.Descriptor instead.
 func (*InstallSnapshotReply) Descriptor() ([]byte, []int) {
-	return file_proto_service_proto_rawDescGZIP(), []int{22}
+	return file_proto_service_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *InstallSnapshotReply) GetTerm() int32 {
@@ -1534,13 +1655,14 @@ type Op struct {
 	ExpectedVersion int64                  `protobuf:"varint,6,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
 	ExpireAt        int64                  `protobuf:"varint,7,opt,name=expire_at,json=expireAt,proto3" json:"expire_at,omitempty"`
 	Entries         []*Entry               `protobuf:"bytes,8,rep,name=entries,proto3" json:"entries,omitempty"` //Batch 用
+	LeaseId         int64                  `protobuf:"varint,9,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Op) Reset() {
 	*x = Op{}
-	mi := &file_proto_service_proto_msgTypes[23]
+	mi := &file_proto_service_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1552,7 +1674,7 @@ func (x *Op) String() string {
 func (*Op) ProtoMessage() {}
 
 func (x *Op) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_service_proto_msgTypes[23]
+	mi := &file_proto_service_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1565,7 +1687,7 @@ func (x *Op) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Op.ProtoReflect.Descriptor instead.
 func (*Op) Descriptor() ([]byte, []int) {
-	return file_proto_service_proto_rawDescGZIP(), []int{23}
+	return file_proto_service_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Op) GetType() string {
@@ -1624,6 +1746,13 @@ func (x *Op) GetEntries() []*Entry {
 	return nil
 }
 
+func (x *Op) GetLeaseId() int64 {
+	if x != nil {
+		return x.LeaseId
+	}
+	return 0
+}
+
 var File_proto_service_proto protoreflect.FileDescriptor
 
 const file_proto_service_proto_rawDesc = "" +
@@ -1639,7 +1768,7 @@ const file_proto_service_proto_rawDesc = "" +
 	"\brevision\x18\x03 \x01(\x03R\brevision\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\"\n" +
 	"\x03err\x18\x05 \x01(\x0e2\x10.proto.ErrorTypeR\x03err\x12\x1b\n" +
-	"\tleader_id\x18\x06 \x01(\x03R\bleaderId\"\xb8\x01\n" +
+	"\tleader_id\x18\x06 \x01(\x03R\bleaderId\"\xd3\x01\n" +
 	"\n" +
 	"PutRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -1648,7 +1777,8 @@ const file_proto_service_proto_rawDesc = "" +
 	"request_id\x18\x03 \x01(\x03R\trequestId\x12\x1b\n" +
 	"\tclient_id\x18\x04 \x01(\x03R\bclientId\x12)\n" +
 	"\x10expected_version\x18\x05 \x01(\x03R\x0fexpectedVersion\x12\x1b\n" +
-	"\texpire_at\x18\x06 \x01(\x03R\bexpireAt\"i\n" +
+	"\texpire_at\x18\x06 \x01(\x03R\bexpireAt\x12\x19\n" +
+	"\blease_id\x18\a \x01(\x03R\aleaseId\"i\n" +
 	"\bPutReply\x12&\n" +
 	"\x05error\x18\x01 \x01(\x0e2\x10.proto.ErrorTypeR\x05error\x12\x1b\n" +
 	"\tleader_id\x18\x02 \x01(\x03R\bleaderId\x12\x18\n" +
@@ -1660,10 +1790,11 @@ const file_proto_service_proto_rawDesc = "" +
 	"request_id\x18\x02 \x01(\x03R\trequestId\x12\x1b\n" +
 	"\tclient_id\x18\x03 \x01(\x03R\bclientId\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\x03R\aversion\x12\x16\n" +
-	"\x06prefix\x18\x05 \x01(\bR\x06prefix\"2\n" +
+	"\x06prefix\x18\x05 \x01(\bR\x06prefix\"L\n" +
 	"\bKeyValue\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"\x8c\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\x03R\aversion\"\x8c\x01\n" +
 	"\bGetReply\x12!\n" +
 	"\x03kvs\x18\x01 \x03(\v2\x0f.proto.KeyValueR\x03kvs\x12&\n" +
 	"\x05error\x18\x02 \x01(\x0e2\x10.proto.ErrorTypeR\x05error\x12\x1b\n" +
@@ -1690,7 +1821,14 @@ const file_proto_service_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\"U\n" +
 	"\x0eKeepAliveReply\x12&\n" +
 	"\x05error\x18\x01 \x01(\x0e2\x10.proto.ErrorTypeR\x05error\x12\x1b\n" +
-	"\tleader_id\x18\x02 \x01(\x03R\bleaderId\"`\n" +
+	"\tleader_id\x18\x02 \x01(\x03R\bleaderId\" \n" +
+	"\fGrantRequest\x12\x10\n" +
+	"\x03ttl\x18\x01 \x01(\x03R\x03ttl\"l\n" +
+	"\n" +
+	"GrantReply\x12&\n" +
+	"\x05error\x18\x01 \x01(\x0e2\x10.proto.ErrorTypeR\x05error\x12\x1b\n" +
+	"\tleader_id\x18\x02 \x01(\x03R\bleaderId\x12\x19\n" +
+	"\blease_id\x18\x03 \x01(\x03R\aleaseId\"`\n" +
 	"\x05Entry\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
@@ -1737,7 +1875,7 @@ const file_proto_service_proto_rawDesc = "" +
 	"\x0elast_snap_term\x18\x04 \x01(\x05R\flastSnapTerm\x12\x12\n" +
 	"\x04data\x18\x05 \x01(\fR\x04data\"*\n" +
 	"\x14InstallSnapshotReply\x12\x12\n" +
-	"\x04term\x18\x01 \x01(\x05R\x04term\"\xec\x01\n" +
+	"\x04term\x18\x01 \x01(\x05R\x04term\"\x87\x02\n" +
 	"\x02Op\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
@@ -1747,14 +1885,15 @@ const file_proto_service_proto_rawDesc = "" +
 	"request_id\x18\x05 \x01(\x03R\trequestId\x12)\n" +
 	"\x10expected_version\x18\x06 \x01(\x03R\x0fexpectedVersion\x12\x1b\n" +
 	"\texpire_at\x18\a \x01(\x03R\bexpireAt\x12&\n" +
-	"\aentries\x18\b \x03(\v2\f.proto.EntryR\aentries*r\n" +
+	"\aentries\x18\b \x03(\v2\f.proto.EntryR\aentries\x12\x19\n" +
+	"\blease_id\x18\t \x01(\x03R\aleaseId*r\n" +
 	"\tErrorType\x12\x06\n" +
 	"\x02OK\x10\x00\x12\x10\n" +
 	"\fWRONG_LEADER\x10\x01\x12\x11\n" +
 	"\rKEY_NOT_EXIST\x10\x02\x12\x11\n" +
 	"\rWRONG_VERSION\x10\x03\x12\x12\n" +
 	"\x0eINTERNAL_ERROR\x10\x04\x12\x11\n" +
-	"\rCOMPACT_ERROR\x10\x052\xe9\x02\n" +
+	"\rCOMPACT_ERROR\x10\x052\x9a\x03\n" +
 	"\x02Kv\x12)\n" +
 	"\x03Put\x12\x11.proto.PutRequest\x1a\x0f.proto.PutReply\x12)\n" +
 	"\x03Get\x12\x11.proto.GetRequest\x1a\x0f.proto.GetReply\x122\n" +
@@ -1762,7 +1901,8 @@ const file_proto_service_proto_rawDesc = "" +
 	"\x05Batch\x12\x13.proto.BatchRequest\x1a\x11.proto.BatchReply\x124\n" +
 	"\x05Watch\x12\x13.proto.WatchRequest\x1a\x14.proto.WatchResponse0\x01\x125\n" +
 	"\aCompact\x12\x15.proto.CompactRequest\x1a\x13.proto.CompactReply\x12;\n" +
-	"\tKeepAlive\x12\x17.proto.KeepAliveRequest\x1a\x15.proto.KeepAliveReply2\xd0\x01\n" +
+	"\tKeepAlive\x12\x17.proto.KeepAliveRequest\x1a\x15.proto.KeepAliveReply\x12/\n" +
+	"\x05Grant\x12\x13.proto.GrantRequest\x1a\x11.proto.GrantReply2\xd0\x01\n" +
 	"\x04Raft\x12>\n" +
 	"\vRequestVote\x12\x16.proto.RequestVoteArgs\x1a\x17.proto.RequestVoteReply\x12<\n" +
 	"\rAppendEntries\x12\x14.proto.HeartbeatArgs\x1a\x15.proto.HeartbeatReply\x12J\n" +
@@ -1781,7 +1921,7 @@ func file_proto_service_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_service_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_proto_service_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_proto_service_proto_goTypes = []any{
 	(ErrorType)(0),               // 0: proto.ErrorType
 	(*WatchRequest)(nil),         // 1: proto.WatchRequest
@@ -1797,17 +1937,19 @@ var file_proto_service_proto_goTypes = []any{
 	(*CompactReply)(nil),         // 11: proto.CompactReply
 	(*KeepAliveRequest)(nil),     // 12: proto.KeepAliveRequest
 	(*KeepAliveReply)(nil),       // 13: proto.KeepAliveReply
-	(*Entry)(nil),                // 14: proto.Entry
-	(*BatchRequest)(nil),         // 15: proto.BatchRequest
-	(*BatchReply)(nil),           // 16: proto.BatchReply
-	(*RequestVoteArgs)(nil),      // 17: proto.RequestVoteArgs
-	(*RequestVoteReply)(nil),     // 18: proto.RequestVoteReply
-	(*LogEntry)(nil),             // 19: proto.LogEntry
-	(*HeartbeatArgs)(nil),        // 20: proto.HeartbeatArgs
-	(*HeartbeatReply)(nil),       // 21: proto.HeartbeatReply
-	(*InstallSnapshotArgs)(nil),  // 22: proto.InstallSnapshotArgs
-	(*InstallSnapshotReply)(nil), // 23: proto.InstallSnapshotReply
-	(*Op)(nil),                   // 24: proto.Op
+	(*GrantRequest)(nil),         // 14: proto.GrantRequest
+	(*GrantReply)(nil),           // 15: proto.GrantReply
+	(*Entry)(nil),                // 16: proto.Entry
+	(*BatchRequest)(nil),         // 17: proto.BatchRequest
+	(*BatchReply)(nil),           // 18: proto.BatchReply
+	(*RequestVoteArgs)(nil),      // 19: proto.RequestVoteArgs
+	(*RequestVoteReply)(nil),     // 20: proto.RequestVoteReply
+	(*LogEntry)(nil),             // 21: proto.LogEntry
+	(*HeartbeatArgs)(nil),        // 22: proto.HeartbeatArgs
+	(*HeartbeatReply)(nil),       // 23: proto.HeartbeatReply
+	(*InstallSnapshotArgs)(nil),  // 24: proto.InstallSnapshotArgs
+	(*InstallSnapshotReply)(nil), // 25: proto.InstallSnapshotReply
+	(*Op)(nil),                   // 26: proto.Op
 }
 var file_proto_service_proto_depIdxs = []int32{
 	0,  // 0: proto.WatchResponse.err:type_name -> proto.ErrorType
@@ -1817,35 +1959,38 @@ var file_proto_service_proto_depIdxs = []int32{
 	0,  // 4: proto.DeleteReply.error:type_name -> proto.ErrorType
 	0,  // 5: proto.CompactReply.error:type_name -> proto.ErrorType
 	0,  // 6: proto.KeepAliveReply.error:type_name -> proto.ErrorType
-	14, // 7: proto.BatchRequest.entries:type_name -> proto.Entry
-	0,  // 8: proto.BatchReply.error:type_name -> proto.ErrorType
-	19, // 9: proto.HeartbeatArgs.entries:type_name -> proto.LogEntry
-	14, // 10: proto.Op.entries:type_name -> proto.Entry
-	3,  // 11: proto.Kv.Put:input_type -> proto.PutRequest
-	5,  // 12: proto.Kv.Get:input_type -> proto.GetRequest
-	8,  // 13: proto.Kv.Delete:input_type -> proto.DeleteRequest
-	15, // 14: proto.Kv.Batch:input_type -> proto.BatchRequest
-	1,  // 15: proto.Kv.Watch:input_type -> proto.WatchRequest
-	10, // 16: proto.Kv.Compact:input_type -> proto.CompactRequest
-	12, // 17: proto.Kv.KeepAlive:input_type -> proto.KeepAliveRequest
-	17, // 18: proto.Raft.RequestVote:input_type -> proto.RequestVoteArgs
-	20, // 19: proto.Raft.AppendEntries:input_type -> proto.HeartbeatArgs
-	22, // 20: proto.Raft.InstallSnapshot:input_type -> proto.InstallSnapshotArgs
-	4,  // 21: proto.Kv.Put:output_type -> proto.PutReply
-	7,  // 22: proto.Kv.Get:output_type -> proto.GetReply
-	9,  // 23: proto.Kv.Delete:output_type -> proto.DeleteReply
-	16, // 24: proto.Kv.Batch:output_type -> proto.BatchReply
-	2,  // 25: proto.Kv.Watch:output_type -> proto.WatchResponse
-	11, // 26: proto.Kv.Compact:output_type -> proto.CompactReply
-	13, // 27: proto.Kv.KeepAlive:output_type -> proto.KeepAliveReply
-	18, // 28: proto.Raft.RequestVote:output_type -> proto.RequestVoteReply
-	21, // 29: proto.Raft.AppendEntries:output_type -> proto.HeartbeatReply
-	23, // 30: proto.Raft.InstallSnapshot:output_type -> proto.InstallSnapshotReply
-	21, // [21:31] is the sub-list for method output_type
-	11, // [11:21] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	0,  // 7: proto.GrantReply.error:type_name -> proto.ErrorType
+	16, // 8: proto.BatchRequest.entries:type_name -> proto.Entry
+	0,  // 9: proto.BatchReply.error:type_name -> proto.ErrorType
+	21, // 10: proto.HeartbeatArgs.entries:type_name -> proto.LogEntry
+	16, // 11: proto.Op.entries:type_name -> proto.Entry
+	3,  // 12: proto.Kv.Put:input_type -> proto.PutRequest
+	5,  // 13: proto.Kv.Get:input_type -> proto.GetRequest
+	8,  // 14: proto.Kv.Delete:input_type -> proto.DeleteRequest
+	17, // 15: proto.Kv.Batch:input_type -> proto.BatchRequest
+	1,  // 16: proto.Kv.Watch:input_type -> proto.WatchRequest
+	10, // 17: proto.Kv.Compact:input_type -> proto.CompactRequest
+	12, // 18: proto.Kv.KeepAlive:input_type -> proto.KeepAliveRequest
+	14, // 19: proto.Kv.Grant:input_type -> proto.GrantRequest
+	19, // 20: proto.Raft.RequestVote:input_type -> proto.RequestVoteArgs
+	22, // 21: proto.Raft.AppendEntries:input_type -> proto.HeartbeatArgs
+	24, // 22: proto.Raft.InstallSnapshot:input_type -> proto.InstallSnapshotArgs
+	4,  // 23: proto.Kv.Put:output_type -> proto.PutReply
+	7,  // 24: proto.Kv.Get:output_type -> proto.GetReply
+	9,  // 25: proto.Kv.Delete:output_type -> proto.DeleteReply
+	18, // 26: proto.Kv.Batch:output_type -> proto.BatchReply
+	2,  // 27: proto.Kv.Watch:output_type -> proto.WatchResponse
+	11, // 28: proto.Kv.Compact:output_type -> proto.CompactReply
+	13, // 29: proto.Kv.KeepAlive:output_type -> proto.KeepAliveReply
+	15, // 30: proto.Kv.Grant:output_type -> proto.GrantReply
+	20, // 31: proto.Raft.RequestVote:output_type -> proto.RequestVoteReply
+	23, // 32: proto.Raft.AppendEntries:output_type -> proto.HeartbeatReply
+	25, // 33: proto.Raft.InstallSnapshot:output_type -> proto.InstallSnapshotReply
+	23, // [23:34] is the sub-list for method output_type
+	12, // [12:23] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_proto_service_proto_init() }
@@ -1859,7 +2004,7 @@ func file_proto_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_service_proto_rawDesc), len(file_proto_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   24,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   2,
 		},
