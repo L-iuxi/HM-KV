@@ -149,6 +149,7 @@ func (kv *KvServer) HandlePut(op *proto.Op) result{
 		_ = kv.leaseMgr.Attach(op.Key, leaseID)
 	}
 
+	fmt.Printf("[kv] Put key=%s rev=%d\n", op.Key, rev)
 	kv.watcherManager.Notify(watch.WatchEvent{
 		Type:     "Put",
 		Key:      op.Key,
@@ -186,6 +187,7 @@ func (kv *KvServer) HandleDelete(op *proto.Op) result {
 
 	rev := kv.mvcc.Delete(op.Key)
 
+	fmt.Printf("[kv] Delete key=%s rev=%d\n", op.Key, rev)
 	kv.lastRequest[op.ClientId] = op.RequestId //记录该clientid最后一个请求结果
 
 	kv.watcherManager.Notify(watch.WatchEvent{

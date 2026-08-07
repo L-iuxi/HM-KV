@@ -3,6 +3,7 @@ package raft
 import (
 	"TicketX/proto"
 	"context"
+	"fmt"
 )
 
 // 发起选举
@@ -11,6 +12,8 @@ func (rf *Raft) startElection() {
 
 	rf.states = Candidate
 	rf.term++
+
+	fmt.Printf("[raft] node %d: starting election, term %d\n", rf.me, rf.term)
 	rf.vote = int32(rf.me)
 
 	term := rf.term
@@ -60,6 +63,7 @@ func (rf *Raft) startElection() {
 			}
 			//发现更高term
 			if reply.Term > rf.term {
+				fmt.Printf("[raft] node %d: stepping down to Follower (higher term %d from vote reply), was term %d\n", rf.me, reply.Term, rf.term)
 				rf.term = reply.Term
 				rf.states = Follower
 				rf.vote = -1
@@ -70,6 +74,7 @@ func (rf *Raft) startElection() {
 				votes++
 				if votes > len(rf.peers)/2 {
 					rf.states = Leader
+					fmt.Printf("[raft] node %d: became Leader, term %d\n", rf.me, rf.term)
 
 					for i := range rf.peers {
 						rf.nextIndex[i] = rf.getLastIndex() + 1
@@ -136,6 +141,7 @@ func (rf *Raft) RequestVote(ctx context.Context, args *proto.RequestVoteArgs) (*
 
 	//版本号大了，更新版本号，清空投票
 	if args.Term > rf.term {
+		fmt.Printf("[raft] node %d: reverting to Follower (RequestVote from node %d, term %d > %d)\n", rf.me, args.CandidateId, args.Term, rf.term)
 		rf.term = args.Term
 		rf.vote = -1
 		rf.states = Follower
