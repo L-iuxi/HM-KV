@@ -1,8 +1,8 @@
 package kv
 
 import (
-	types "TicketX/internal/type"
 	"TicketX/internal/raft"
+	types "TicketX/internal/type"
 	"TicketX/internal/watch"
 	"TicketX/proto"
 	"fmt"
@@ -17,6 +17,7 @@ func (kv *KvServer) applier() {
 	batch := make([]raft.ApplyMsg, 0)
 
 	ticker := time.NewTicker(kv.cfg.KV.ApplyBatchInterval)
+	recovered := false
 
 	for {
 
@@ -29,6 +30,10 @@ func (kv *KvServer) applier() {
 			if len(batch) >= 100 {
 				kv.applyBatch(batch) //处理batch里面的消息
 				batch = nil
+				if !recovered {
+					recovered = true
+					close(kv.readyCh)
+				}
 			}
 
 		case <-ticker.C:
@@ -36,6 +41,14 @@ func (kv *KvServer) applier() {
 			if len(batch) > 0 {
 				kv.applyBatch(batch)
 				batch = nil
+				if !recovered {
+					recovered = true
+					close(kv.readyCh)
+				}
+			} else if !recovered {
+				// 没有积压的 WAL 条目，直接标记就绪
+				recovered = true
+				close(kv.readyCh)
 			}
 		}
 	}

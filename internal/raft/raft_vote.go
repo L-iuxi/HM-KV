@@ -32,16 +32,22 @@ func (rf *Raft) startElection() {
 	// 重置选举计时器,避免重复选举
 	rf.overElectiontime.Reset(rf.electionTimeout())
 
+	// 拷贝 peers 和 clients，防止并发成员变更导致下标越界
+	peers := make([]string, len(rf.peers))
+	copy(peers, rf.peers)
+	clients := make([]proto.RaftClient, len(rf.clients))
+	copy(clients, rf.clients)
+
 	rf.mu.Unlock()
 
 	votes := 1
 
-	for i := range rf.peers {
+	for i, addr := range peers {
 		if i == me {
 			continue
 		}
 
-		go func(server int32) {
+		go func(client proto.RaftClient, peerAddr string) {
 			args := &RequestVoteArgs{
 				Term:         term,
 				CandidateId:  int32(me),
@@ -51,7 +57,7 @@ func (rf *Raft) startElection() {
 
 			reply := &RequestVoteReply{}
 
-			if !rf.sendRequestVote(server, args, reply) {
+			if !rf.sendRequestVoteTo(client, args, reply) {
 				return
 			}
 			rf.mu.Lock()
@@ -76,17 +82,41 @@ func (rf *Raft) startElection() {
 					rf.states = Leader
 					fmt.Printf("[raft] node %d: became Leader, term %d\n", rf.me, rf.term)
 
-					for i := range rf.peers {
-						rf.nextIndex[i] = rf.getLastIndex() + 1
-						rf.matchIndex[i] = 0
+					for j := range rf.peers {
+						rf.nextIndex[j] = rf.getLastIndex() + 1
+						rf.matchIndex[j] = 0
 					}
 					//立刻心跳
 					//防止其他节点再次发起选举，通知所有选举自己是leader
 					go rf.broadcastAppendEntries()
 				}
 			}
-		}(int32(i))
+		}(clients[i], addr)
 	}
+}
+
+// sendRequestVoteTo 向目标 follower 发送投票请求。client 由调用方在锁内取出，避免无锁访问 rf.clients。
+func (rf *Raft) sendRequestVoteTo(client proto.RaftClient, args *RequestVoteArgs, reply *RequestVoteReply) bool {
+
+	ctx, cancel := context.WithTimeout(context.Background(), rf.cfg.RPCTimeout)
+	defer cancel()
+
+	res, err := client.RequestVote(ctx, &proto.RequestVoteArgs{
+		Term:         int32(args.Term),
+		CandidateId:  int32(args.CandidateId),
+		LastLogIndex: int32(args.LastLogIndex),
+		LastLogTerm:  int32(args.LastLogTerm),
+	})
+	if err != nil {
+		return false
+	}
+
+	reply.Term = int32(res.Term)
+	reply.IsVote = 0
+	if res.VoteGranted {
+		reply.IsVote = 1
+	}
+	return true
 }
 
 // 向目标follower发送投票请求

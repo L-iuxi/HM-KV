@@ -11,6 +11,9 @@ import (
 
 func (kv *KvServer) Get(ctx context.Context, req *proto.GetRequest) (*proto.GetReply, error) {
 
+	// WAL 回放完成前阻塞读请求
+	<-kv.readyCh
+
 	if req.Prefix { //按前缀读取
 		return kv.readByPrefix(req.Key)
 	}

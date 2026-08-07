@@ -59,5 +59,17 @@ func (mvcc *MVCC) Recover() error {
 		}
 	}
 
+	// 重建 revisions（全局版本顺序），重启后 compact 依赖此切片
+	var allRevisions []RevisionEntry
+	for key, revs := range keyReversion {
+		for _, rev := range revs {
+			allRevisions = append(allRevisions, RevisionEntry{Key: key, Revision: rev})
+		}
+	}
+	sort.Slice(allRevisions, func(i, j int) bool {
+		return allRevisions[i].Revision < allRevisions[j].Revision
+	})
+	mvcc.revisions = allRevisions
+
 	return nil
 }

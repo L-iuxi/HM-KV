@@ -10,28 +10,36 @@ import (
 
 // 向所有follwer发送心跳
 func (rf *Raft) broadcastAppendEntries() {
-	//先确认自己状态
+	//先确认自己状态，同时拷贝 peer 列表防止并发成员变更
 	rf.mu.Lock()
 	if rf.states != Leader {
 		rf.mu.Unlock()
 		return
 	}
 
-	gen := rf.readIndexGen
-
+	readGen := rf.readIndexGen
+	pGen := rf.peerGen
+	me := rf.me
+	peers := make([]string, len(rf.peers))
+	copy(peers, rf.peers)
 	rf.mu.Unlock()
 
-	//便利所有follower，每个follower一个goroutine
-	for i := range rf.peers {
-		if i == rf.me {
+	//遍历本地副本，每个follower一个goroutine
+	for i, addr := range peers {
+		if i == me {
 			continue
 		}
 
-		go func(peer int32, gen int) {
+		go func(peerAddr string, peerIdx int, pGen int64, readGen int) {
 			rf.mu.Lock()
+			// O(1) 校验：成员变更后 gen 不一致 / peer 已删除 / 地址被替换
+			if rf.peerGen != pGen || peerIdx >= len(rf.peers) || rf.peers[peerIdx] != peerAddr {
+				rf.mu.Unlock()
+				return
+			}
 
 			//确定leader对于这个follower要同步的位置
-			next := rf.nextIndex[peer]
+			next := rf.nextIndex[peerIdx]
 			prevIndex := next - 1
 
 			var prevTerm int32
@@ -39,8 +47,9 @@ func (rf *Raft) broadcastAppendEntries() {
 			//要同步的位置已经变成冷冰冰的快照...
 			//发一个快照过去
 			if next <= rf.lastSnapIndex {
+				client := rf.clients[peerIdx]
 				rf.mu.Unlock()
-				rf.sendInstallSnapshot(peer)
+				rf.sendInstallSnapshotTo(client, peerIdx, peerAddr, pGen)
 				return //发快照就不发心跳
 			}
 
@@ -61,17 +70,24 @@ func (rf *Raft) broadcastAppendEntries() {
 				PreLogTerm:        prevTerm,
 				LeaderCommitIndex: rf.commitIndex,
 			}
+			// 锁内取出 client，避免无锁访问 rf.clients
+			client := rf.clients[peerIdx]
 			rf.mu.Unlock()
 
 			//发送
 			reply := &HeartbeatReply{}
-			ok := rf.SendAppendEntries(peer, args, reply)
+			ok := rf.sendAppendEntriesTo(client, args, reply)
 			if !ok {
 				return
 			}
 
 			rf.mu.Lock()
 			defer rf.mu.Unlock()
+
+			// RPC 回来后重新校验，成员可能已变更
+			if rf.peerGen != pGen || peerIdx >= len(rf.peers) || rf.peers[peerIdx] != peerAddr {
+				return
+			}
 
 			//任期落后，打为follower
 			if reply.Term > rf.term {
@@ -90,7 +106,7 @@ func (rf *Raft) broadcastAppendEntries() {
 				rf.lastHeartbeat = time.Now()
 
 				// ReadIndexcount受到超过半数就关闭
-				if rf.readIndexGate != nil && rf.readIndexTerm == rf.term && rf.readIndexGen == gen {
+				if rf.readIndexGate != nil && rf.readIndexTerm == rf.term && rf.readIndexGen == readGen {
 					rf.readIndexCounter++
 					if rf.readIndexCounter > len(rf.peers)/2 {
 						close(rf.readIndexGate)
@@ -101,11 +117,11 @@ func (rf *Raft) broadcastAppendEntries() {
 				//记录下一次要同步的日志位置
 				if len(args.Entries) > 0 {
 
-					rf.nextIndex[peer] = int32(int(args.PreLogIndex) + len(args.Entries) + 1)
+					rf.nextIndex[peerIdx] = int32(int(args.PreLogIndex) + len(args.Entries) + 1)
 					//成功对齐日志，记录成功数
-					rf.matchIndex[peer] = int32(int(args.PreLogIndex) + len(args.Entries))
+					rf.matchIndex[peerIdx] = int32(int(args.PreLogIndex) + len(args.Entries))
 				} else {
-					rf.nextIndex[peer] = args.PreLogIndex + 1
+					rf.nextIndex[peerIdx] = args.PreLogIndex + 1
 				}
 				for N := rf.getLastIndex(); N > rf.commitIndex; N-- {
 					if N <= rf.lastSnapIndex {
@@ -124,14 +140,14 @@ func (rf *Raft) broadcastAppendEntries() {
 				}
 			} else {
 				//同步失败，记录下一次同步位置为冲突位置
-				rf.nextIndex[peer] = reply.ConflictIndex
-				if rf.nextIndex[peer] > rf.getLastIndex()+1 {
-					rf.nextIndex[peer] = rf.getLastIndex() + 1
+				rf.nextIndex[peerIdx] = reply.ConflictIndex
+				if rf.nextIndex[peerIdx] > rf.getLastIndex()+1 {
+					rf.nextIndex[peerIdx] = rf.getLastIndex() + 1
 				}
 
 			}
 
-		}(int32(i), gen)
+		}(addr, i, pGen, readGen)
 	}
 }
 
@@ -235,6 +251,39 @@ func (rf *Raft) AppendEntries(ctx context.Context, args *proto.HeartbeatArgs) (*
 	reply.Success = true
 	reply.Term = rf.term
 	return reply, nil
+}
+
+// sendAppendEntriesTo 向指定 follower 发送日志。client 由调用方在锁内取出，避免无锁访问 rf.clients。
+func (rf *Raft) sendAppendEntriesTo(client proto.RaftClient, args *HeartbeatArgs, reply *HeartbeatReply) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), rf.cfg.RPCTimeout)
+	defer cancel()
+
+	entries := make([]*proto.LogEntry, len(args.Entries))
+	for i, e := range args.Entries {
+		entries[i] = &proto.LogEntry{
+			Term:    int64(e.Term),
+			Command: e.Command,
+		}
+	}
+
+	res, err := client.AppendEntries(ctx, &proto.HeartbeatArgs{
+		LeaderId:          int32(args.LeaderId),
+		LeaderTerm:        int32(args.LeaderTerm),
+		PreLogIndex:       int32(args.PreLogIndex),
+		PreLogTerm:        int32(args.PreLogTerm),
+		Entries:           entries,
+		LeaderCommitIndex: int32(args.LeaderCommitIndex),
+	})
+
+	if err != nil {
+		return false
+	}
+
+	reply.Success = res.Success
+	reply.Term = int32(res.Term)
+	reply.ConflictIndex = int32(res.ConflictIndex)
+
+	return true
 }
 
 // leader主动向某个follower发送日志

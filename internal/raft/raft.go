@@ -159,8 +159,7 @@ func MakeRaft(applyCh chan ApplyMsg, peers []string, me int32, cfg RaftConfig) *
 	rf.matchIndex = make([]int32, len(peers))
 	rf.overElectiontime = time.NewTimer(rf.electionTimeout())
 	for _, addr := range peers {
-		conn, _ := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		rf.clients = append(rf.clients, proto.NewRaftClient(conn))
+		rf.addPeers(addr)
 	}
 	rf.heartbeat = time.NewTimer(cfg.HeartbeatInterval)
 
@@ -170,4 +169,24 @@ func MakeRaft(applyCh chan ApplyMsg, peers []string, me int32, cfg RaftConfig) *
 	go rf.ticker()
 	return rf
 
+}
+func (rf *Raft) addPeers(addr string) error {
+	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	rf.clientConns = append(rf.clientConns, conn)
+	rf.clients = append(rf.clients, proto.NewRaftClient(conn))
+
+	return nil
+}
+
+// findPeerIndex 按地址查找 peer 下标，-1 表示不存在。调用方必须持有 rf.mu。
+func (rf *Raft) findPeerIndex(addr string) int {
+	for i, a := range rf.peers {
+		if a == addr {
+			return i
+		}
+	}
+	return -1
 }

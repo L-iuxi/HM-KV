@@ -32,6 +32,7 @@ type KvServer struct {
 
 	watcherManager *watch.WatcherManager
 	eventNotifier  chan watch.WatchEvent
+	readyCh        chan struct{} // WAL 回放完成后关闭，读路径等待此管道
 }
 
 // KvEngine gRPC 服务接口

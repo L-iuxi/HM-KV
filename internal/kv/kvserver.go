@@ -65,6 +65,7 @@ func MakeKVServer(cfg *config.Config) *KvServer {
 	kv.InitMvcc(store)
 
 	kv.leaseMgr = lease.NewLeaseManager(cfg.Lease.MinTTL)
+	kv.readyCh = make(chan struct{})
 	// 初始化kv相关
 	kv.InitKvserver(cfg.Peers(), cfg.Node.ID)
 	//初始化watch相关

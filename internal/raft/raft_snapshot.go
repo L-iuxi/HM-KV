@@ -10,7 +10,7 @@ import (
 )
 
 // 发送快照
-func (rf *Raft) sendInstallSnapshot(peer int32) {
+func (rf *Raft) sendInstallSnapshotTo(client proto.RaftClient, peer int, peerAddr string, pGen int64) {
 
 	rf.mu.Lock()
 	data := make([]byte, len(rf.snap))
@@ -28,13 +28,18 @@ func (rf *Raft) sendInstallSnapshot(peer int32) {
 	ctx, cancel := context.WithTimeout(context.Background(), rf.cfg.ReadIndexTimeout)
 	defer cancel()
 
-	res, err := rf.clients[peer].InstallSnapshot(ctx, args)
+	res, err := client.InstallSnapshot(ctx, args)
 	if err != nil {
 		return
 	}
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	// RPC 回来后校验成员可能已变更
+	if rf.peerGen != pGen || peer >= len(rf.peers) || rf.peers[peer] != peerAddr {
+		return
+	}
 
 	if int32(res.Term) > rf.term {
 		rf.term = int32(res.Term)

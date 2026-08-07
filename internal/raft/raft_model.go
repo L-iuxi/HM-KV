@@ -6,6 +6,8 @@ import (
 	"TicketX/proto"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc"
 )
 
 // 传输消息的结构体
@@ -51,6 +53,8 @@ type Raft struct {
 	me            int      //当前服务器在peer的下标
 	peers         []string //存有所有服务器的组
 	clients       []proto.RaftClient
+	clientConns   []*grpc.ClientConn // 保存 gRPC 连接，删除节点时关闭
+	peerGen       int64              // 成员变更时递增，心跳/选举 goroutine 用于 O(1) 校验
 	states        State            //状态
 	term          int32            //当前任期号
 	vote          int32            //投票给
@@ -66,7 +70,7 @@ type Raft struct {
 	overElectiontime *time.Timer   //选举超时
 	lastSnapIndex    int32         //上次截断日志的位置
 	lastSnapTerm     int32         //上次截断日志的任期
-	matchIndex       []int32
+	matchIndex       []int32       //已经成功复制的最后一条日志位置
 	snap             []byte
 	wal              *wal.Wal
 	cfg              RaftConfig //配置参数
@@ -93,6 +97,7 @@ type RequestVoteReply struct {
 	IsVote int32 //是否投票
 }
 
+// 心跳请求
 type HeartbeatArgs struct {
 	LeaderId          int32
 	LeaderTerm        int32
