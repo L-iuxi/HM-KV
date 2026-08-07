@@ -70,7 +70,7 @@ func (c *Client) tryNextLeader(current int) {
 		return // 已被其他请求切换
 	}
 
-	// 优先尝试已知 leader（从 WRONG_LEADER 响应学到的）
+	// 优先尝试已知 leader
 	known := c.knownLeader.Load()
 	if known >= 0 && int(known) != current && int(known) < len(c.addrs) {
 		c.leaderIdx.Store(int32(known))
