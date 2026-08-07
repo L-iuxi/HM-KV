@@ -24,12 +24,15 @@ const (
 type ErrorType int32
 
 const (
-	ErrorType_OK             ErrorType = 0
-	ErrorType_WRONG_LEADER   ErrorType = 1
-	ErrorType_KEY_NOT_EXIST  ErrorType = 2
-	ErrorType_WRONG_VERSION  ErrorType = 3
-	ErrorType_INTERNAL_ERROR ErrorType = 4
-	ErrorType_COMPACT_ERROR  ErrorType = 5
+	ErrorType_OK                    ErrorType = 0
+	ErrorType_WRONG_LEADER          ErrorType = 1
+	ErrorType_KEY_NOT_EXIST         ErrorType = 2
+	ErrorType_WRONG_VERSION         ErrorType = 3
+	ErrorType_INTERNAL_ERROR        ErrorType = 4
+	ErrorType_COMPACT_ERROR         ErrorType = 5
+	ErrorType_INVALID_ARGUMENT      ErrorType = 6
+	ErrorType_MEMBER_ALREADY_EXISTS ErrorType = 7
+	ErrorType_MEMBER_NOT_FOUND      ErrorType = 8
 )
 
 // Enum value maps for ErrorType.
@@ -41,14 +44,20 @@ var (
 		3: "WRONG_VERSION",
 		4: "INTERNAL_ERROR",
 		5: "COMPACT_ERROR",
+		6: "INVALID_ARGUMENT",
+		7: "MEMBER_ALREADY_EXISTS",
+		8: "MEMBER_NOT_FOUND",
 	}
 	ErrorType_value = map[string]int32{
-		"OK":             0,
-		"WRONG_LEADER":   1,
-		"KEY_NOT_EXIST":  2,
-		"WRONG_VERSION":  3,
-		"INTERNAL_ERROR": 4,
-		"COMPACT_ERROR":  5,
+		"OK":                    0,
+		"WRONG_LEADER":          1,
+		"KEY_NOT_EXIST":         2,
+		"WRONG_VERSION":         3,
+		"INTERNAL_ERROR":        4,
+		"COMPACT_ERROR":         5,
+		"INVALID_ARGUMENT":      6,
+		"MEMBER_ALREADY_EXISTS": 7,
+		"MEMBER_NOT_FOUND":      8,
 	}
 )
 
@@ -2173,14 +2182,17 @@ const file_proto_service_proto_rawDesc = "" +
 	"\aentries\x18\b \x03(\v2\f.proto.EntryR\aentries\x12\x19\n" +
 	"\blease_id\x18\t \x01(\x03R\aleaseId\x128\n" +
 	"\rmember_change\x18\n" +
-	" \x01(\v2\x13.proto.MemberchangeR\fmemberChange*r\n" +
+	" \x01(\v2\x13.proto.MemberchangeR\fmemberChange*\xb9\x01\n" +
 	"\tErrorType\x12\x06\n" +
 	"\x02OK\x10\x00\x12\x10\n" +
 	"\fWRONG_LEADER\x10\x01\x12\x11\n" +
 	"\rKEY_NOT_EXIST\x10\x02\x12\x11\n" +
 	"\rWRONG_VERSION\x10\x03\x12\x12\n" +
 	"\x0eINTERNAL_ERROR\x10\x04\x12\x11\n" +
-	"\rCOMPACT_ERROR\x10\x052\xa3\x04\n" +
+	"\rCOMPACT_ERROR\x10\x05\x12\x14\n" +
+	"\x10INVALID_ARGUMENT\x10\x06\x12\x19\n" +
+	"\x15MEMBER_ALREADY_EXISTS\x10\a\x12\x14\n" +
+	"\x10MEMBER_NOT_FOUND\x10\b2\xa3\x04\n" +
 	"\x02Kv\x12)\n" +
 	"\x03Put\x12\x11.proto.PutRequest\x1a\x0f.proto.PutReply\x12)\n" +
 	"\x03Get\x12\x11.proto.GetRequest\x1a\x0f.proto.GetReply\x122\n" +

@@ -38,6 +38,9 @@ enum ErrorType{
     WRONG_VERSION = 3;
     INTERNAL_ERROR = 4;
     COMPACT_ERROR = 5;
+    INVALID_ARGUMENT=6;
+    MEMBER_ALREADY_EXISTS = 7;
+    MEMBER_NOT_FOUND = 8;
 }
 
 //watch请求
