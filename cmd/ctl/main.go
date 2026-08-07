@@ -18,6 +18,7 @@ var helpText = `Commands:
   delete <key>                  — delete key
   prefix <prefix>               — list keys with prefix
   watch  <key>                  — watch key for changes (bg)
+  watchprefix <prefix>          — watch prefix for changes (bg)
   grant  <ttl>                  — create a lease, returns lease ID
   putlease <key> <val> <lease>  — write key bound to existing lease
   keepalive <key>               — renew lease on key
@@ -165,6 +166,24 @@ func dispatch(ctx context.Context, c *clerk.Client, line string) {
 			}
 		}()
 		fmt.Printf("watching %s...\n", key)
+
+	case "watchprefix":
+		if len(parts) < 2 {
+			fmt.Println("usage: watchprefix <prefix>")
+			return
+		}
+		prefix := parts[1]
+		ch, err := c.WatchPrefix(ctx, prefix, 0)
+		if err != nil {
+			fmt.Println("error:", err)
+			return
+		}
+		go func() {
+			for ev := range ch {
+				fmt.Printf("\n[%s*] %s %s=%s rev=%d\nhm> ", prefix, ev.Type, ev.Key, ev.Value, ev.Revision)
+			}
+		}()
+		fmt.Printf("watching prefix %s...\n", prefix)
 
 	case "grant":
 		if len(parts) < 2 {
