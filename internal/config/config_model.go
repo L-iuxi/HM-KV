@@ -12,6 +12,9 @@ import (
 )
 
 // Default 返回带默认值的配置
+/*
+默认值->yaml配置覆盖->环境变量覆盖
+*/
 func Default() *Config {
 	return &Config{
 		Node: NodeConfig{
@@ -42,22 +45,24 @@ func Default() *Config {
 }
 
 // Load 从 YAML 文件加载配置，再用环境变量覆盖。
-// 环境变量格式：HMETCD_NODE_ID=1, HMETCD_RAFT_HEARTBEAT_INTERVAL=100ms
 func Load(path string) (*Config, error) {
+	//先读取默认配置
 	cfg := Default()
 
 	if path != "" {
+		//配置文件不存在
 		data, err := os.ReadFile(path)
 		if err != nil && !os.IsNotExist(err) {
 			return nil, fmt.Errorf("read config file: %w", err)
 		}
 		if err == nil {
+			//读取yaml获取配置
 			if err := yaml.Unmarshal(data, cfg); err != nil {
 				return nil, fmt.Errorf("parse config file: %w", err)
 			}
 		}
 	}
-
+	//读取环境变量
 	applyEnvOverrides(cfg)
 	return cfg, nil
 }
@@ -68,6 +73,7 @@ func applyEnvOverrides(cfg *Config) {
 	walkStruct(v, "HMETCD")
 }
 
+// 反射自动找环境变量
 func walkStruct(v reflect.Value, prefix string) {
 	t := v.Type()
 	for i := 0; i < t.NumField(); i++ {
@@ -91,6 +97,7 @@ func walkStruct(v reflect.Value, prefix string) {
 	}
 }
 
+// 按照反射出来的类型转换为变量
 func setField(field reflect.Value, val string) {
 	switch field.Kind() {
 	case reflect.String:
@@ -124,7 +131,7 @@ func setField(field reflect.Value, val string) {
 	}
 }
 
-// Peers 返回节点地址列表（YAML 配置的 peers 或命令行推导）
+// Peers 返回节点地址列表
 func (c *Config) Peers() []string {
 	if len(c.Raft.Peers) > 0 {
 		return c.Raft.Peers
