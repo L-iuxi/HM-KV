@@ -1,9 +1,9 @@
 node:
-  id: 1
+  id: 4
   data_dir: data
 
 server:
-  address: ":50052"
+  address: ":50055"
 
 raft:
   peers:
