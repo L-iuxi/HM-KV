@@ -19,14 +19,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Kv_Put_FullMethodName       = "/proto.Kv/Put"
-	Kv_Get_FullMethodName       = "/proto.Kv/Get"
-	Kv_Delete_FullMethodName    = "/proto.Kv/Delete"
-	Kv_Batch_FullMethodName     = "/proto.Kv/Batch"
-	Kv_Watch_FullMethodName     = "/proto.Kv/Watch"
-	Kv_Compact_FullMethodName   = "/proto.Kv/Compact"
-	Kv_KeepAlive_FullMethodName = "/proto.Kv/KeepAlive"
-	Kv_Grant_FullMethodName     = "/proto.Kv/Grant"
+	Kv_Put_FullMethodName          = "/proto.Kv/Put"
+	Kv_Get_FullMethodName          = "/proto.Kv/Get"
+	Kv_Delete_FullMethodName       = "/proto.Kv/Delete"
+	Kv_Batch_FullMethodName        = "/proto.Kv/Batch"
+	Kv_Watch_FullMethodName        = "/proto.Kv/Watch"
+	Kv_Compact_FullMethodName      = "/proto.Kv/Compact"
+	Kv_KeepAlive_FullMethodName    = "/proto.Kv/KeepAlive"
+	Kv_Grant_FullMethodName        = "/proto.Kv/Grant"
+	Kv_AddMember_FullMethodName    = "/proto.Kv/AddMember"
+	Kv_DeleteMember_FullMethodName = "/proto.Kv/DeleteMember"
 )
 
 // KvClient is the client API for Kv service.
@@ -43,6 +45,8 @@ type KvClient interface {
 	Compact(ctx context.Context, in *CompactRequest, opts ...grpc.CallOption) (*CompactReply, error)
 	KeepAlive(ctx context.Context, in *KeepAliveRequest, opts ...grpc.CallOption) (*KeepAliveReply, error)
 	Grant(ctx context.Context, in *GrantRequest, opts ...grpc.CallOption) (*GrantReply, error)
+	AddMember(ctx context.Context, in *AddMemberRequest, opts ...grpc.CallOption) (*AddMemberResponse, error)
+	DeleteMember(ctx context.Context, in *DeleteMemberRequest, opts ...grpc.CallOption) (*DeleteMemberResponse, error)
 }
 
 type kvClient struct {
@@ -142,6 +146,26 @@ func (c *kvClient) Grant(ctx context.Context, in *GrantRequest, opts ...grpc.Cal
 	return out, nil
 }
 
+func (c *kvClient) AddMember(ctx context.Context, in *AddMemberRequest, opts ...grpc.CallOption) (*AddMemberResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddMemberResponse)
+	err := c.cc.Invoke(ctx, Kv_AddMember_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kvClient) DeleteMember(ctx context.Context, in *DeleteMemberRequest, opts ...grpc.CallOption) (*DeleteMemberResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteMemberResponse)
+	err := c.cc.Invoke(ctx, Kv_DeleteMember_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // KvServer is the server API for Kv service.
 // All implementations must embed UnimplementedKvServer
 // for forward compatibility.
@@ -156,6 +180,8 @@ type KvServer interface {
 	Compact(context.Context, *CompactRequest) (*CompactReply, error)
 	KeepAlive(context.Context, *KeepAliveRequest) (*KeepAliveReply, error)
 	Grant(context.Context, *GrantRequest) (*GrantReply, error)
+	AddMember(context.Context, *AddMemberRequest) (*AddMemberResponse, error)
+	DeleteMember(context.Context, *DeleteMemberRequest) (*DeleteMemberResponse, error)
 	mustEmbedUnimplementedKvServer()
 }
 
@@ -189,6 +215,12 @@ func (UnimplementedKvServer) KeepAlive(context.Context, *KeepAliveRequest) (*Kee
 }
 func (UnimplementedKvServer) Grant(context.Context, *GrantRequest) (*GrantReply, error) {
 	return nil, status.Error(codes.Unimplemented, "method Grant not implemented")
+}
+func (UnimplementedKvServer) AddMember(context.Context, *AddMemberRequest) (*AddMemberResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddMember not implemented")
+}
+func (UnimplementedKvServer) DeleteMember(context.Context, *DeleteMemberRequest) (*DeleteMemberResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteMember not implemented")
 }
 func (UnimplementedKvServer) mustEmbedUnimplementedKvServer() {}
 func (UnimplementedKvServer) testEmbeddedByValue()            {}
@@ -348,6 +380,42 @@ func _Kv_Grant_Handler(srv interface{}, ctx context.Context, dec func(interface{
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Kv_AddMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddMemberRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KvServer).AddMember(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Kv_AddMember_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KvServer).AddMember(ctx, req.(*AddMemberRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Kv_DeleteMember_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteMemberRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KvServer).DeleteMember(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Kv_DeleteMember_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KvServer).DeleteMember(ctx, req.(*DeleteMemberRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Kv_ServiceDesc is the grpc.ServiceDesc for Kv service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -382,6 +450,14 @@ var Kv_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Grant",
 			Handler:    _Kv_Grant_Handler,
+		},
+		{
+			MethodName: "AddMember",
+			Handler:    _Kv_AddMember_Handler,
+		},
+		{
+			MethodName: "DeleteMember",
+			Handler:    _Kv_DeleteMember_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

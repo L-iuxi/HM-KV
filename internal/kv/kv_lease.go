@@ -1,6 +1,7 @@
 package kv
 
 import (
+	types "TicketX/internal/type"
 	"TicketX/proto"
 	"context"
 	"time"
@@ -22,7 +23,7 @@ func (kv *KvServer) KeepAlive(ctx context.Context, req *proto.KeepAliveRequest) 
 		}, nil
 	}
 
-	ch := make(chan result, 1)
+	ch := make(chan types.Result, 1)
 	kv.mu.Lock()
 	kv.waitCh[int64(index)] = ch
 	kv.mu.Unlock()

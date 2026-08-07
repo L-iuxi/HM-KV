@@ -1,6 +1,7 @@
 package kv
 
 import (
+	types "TicketX/internal/type"
 	"TicketX/internal/config"
 	"TicketX/internal/lease"
 	"TicketX/internal/mvcc"
@@ -11,18 +12,12 @@ import (
 	"sync"
 )
 
-// 把applyloop结果返回给put/get的
-type result struct {
-	Value   string
-	Version int64
-	LeaseID int64
-	Err     proto.ErrorType
-}
+type result = types.Result
 
 type KvServer struct {
 	mu sync.Mutex
 	proto.UnimplementedKvServer
-	applyCh chan raft.ApplyMsg    //和raft通信的管道
+	applyCh chan raft.ApplyMsg          //和raft通信的管道
 	waitCh  map[int64]chan result //确保put请求成功commit的管道
 
 	getCh map[int64]chan result //get fallback: ReadIndex 失败时走 Raft 日志

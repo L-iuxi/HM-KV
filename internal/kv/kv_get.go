@@ -1,6 +1,7 @@
 package kv
 
 import (
+	types "TicketX/internal/type"
 	"TicketX/proto"
 	"context"
 	"time"
@@ -56,7 +57,7 @@ func (kv *KvServer) Get(ctx context.Context, req *proto.GetRequest) (*proto.GetR
 		}, nil
 	}
 
-	ch := make(chan result, 1)
+	ch := make(chan types.Result, 1)
 	kv.mu.Lock()
 	kv.getCh[int64(index)] = ch
 	kv.mu.Unlock()

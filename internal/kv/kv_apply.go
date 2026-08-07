@@ -1,6 +1,7 @@
 package kv
 
 import (
+	types "TicketX/internal/type"
 	"TicketX/internal/raft"
 	"TicketX/internal/watch"
 	"TicketX/proto"
@@ -10,40 +11,40 @@ import (
 	po "google.golang.org/protobuf/proto"
 )
 
-//记录批量提交
+// 记录批量提交
 func (kv *KvServer) applier() {
 
-    batch := make([]raft.ApplyMsg,0)
+	batch := make([]raft.ApplyMsg, 0)
 
-    ticker := time.NewTicker(kv.cfg.KV.ApplyBatchInterval)
+	ticker := time.NewTicker(kv.cfg.KV.ApplyBatchInterval)
 
-    for {
+	for {
 
-        select {
+		select {
 
-        case msg := <-kv.applyCh://从管道取消息先放进batch缓冲区
+		case msg := <-kv.applyCh: //从管道取消息先放进batch缓冲区
 
-            batch = append(batch,msg)
+			batch = append(batch, msg)
 
-            if len(batch)>=100 {
-                kv.applyBatch(batch)//处理batch里面的消息
-                batch=nil
-            }
+			if len(batch) >= 100 {
+				kv.applyBatch(batch) //处理batch里面的消息
+				batch = nil
+			}
 
-        case <-ticker.C:
+		case <-ticker.C:
 
-            if len(batch)>0 {
-                kv.applyBatch(batch)
-                batch=nil
-            }
-        }
-    }
+			if len(batch) > 0 {
+				kv.applyBatch(batch)
+				batch = nil
+			}
+		}
+	}
 }
 
 // 接受管道来到msg并执行
 func (kv *KvServer) applyBatch(msg []raft.ApplyMsg) {
 
-	for _,m := range msg{
+	for _, m := range msg {
 		kv.lastApplied = m.CommandIndex
 		if m.CommandValid {
 			data := m.Command.([]byte)
@@ -59,24 +60,24 @@ func (kv *KvServer) applyBatch(msg []raft.ApplyMsg) {
 			switch op.Type {
 
 			case "Put":
-					result := kv.HandlePut(&op)
-					if ch, ok := kv.waitCh[m.CommandIndex]; ok {
-						ch <- result
-					}
-					delete(kv.waitCh, m.CommandIndex)
-				
+				result := kv.HandlePut(&op)
+				if ch, ok := kv.waitCh[m.CommandIndex]; ok {
+					ch <- result
+				}
+				delete(kv.waitCh, m.CommandIndex)
+
 			case "Grant":
-					res := kv.HandleGrant(&op)
-					if ch, ok := kv.waitCh[m.CommandIndex]; ok {
-						ch <- res
-					}
-					delete(kv.waitCh, m.CommandIndex)
-				case "Get":
+				res := kv.HandleGrant(&op)
+				if ch, ok := kv.waitCh[m.CommandIndex]; ok {
+					ch <- res
+				}
+				delete(kv.waitCh, m.CommandIndex)
+			case "Get":
 				if ch, ok := kv.getCh[m.CommandIndex]; ok {
 					result := kv.HandleGet(&op)
 					ch <- result
 				}
-			
+
 				delete(kv.getCh, m.CommandIndex)
 			case "Delete":
 				res := kv.HandleDelete(&op)
@@ -104,6 +105,13 @@ func (kv *KvServer) applyBatch(msg []raft.ApplyMsg) {
 					ch <- res
 					delete(kv.waitCh, m.CommandIndex)
 				}
+			case "CONFIG_CHANGE":
+
+				res := kv.rf.HandleConfigChange(op.MemberChange)
+				if ch, ok := kv.waitCh[m.CommandIndex]; ok {
+					ch <- res
+					delete(kv.waitCh, m.CommandIndex)
+				}
 			}
 
 			kv.mu.Unlock()
@@ -119,7 +127,7 @@ func (kv *KvServer) applyBatch(msg []raft.ApplyMsg) {
 	}
 }
 
-func (kv *KvServer) HandlePut(op *proto.Op) result{
+func (kv *KvServer) HandlePut(op *proto.Op) types.Result {
 	// 去重
 	last := kv.lastRequest[op.ClientId]
 	if op.RequestId <= last {
@@ -218,6 +226,7 @@ func findLE(revs []int64, target int64) int64 {
 
 	return res
 }
+
 // 客户端批量提交，多个 Entry 打包成一个 Raft entry，原子执行
 func (kv *KvServer) HandleBatch(op *proto.Op) result {
 	// 去重
@@ -229,10 +238,10 @@ func (kv *KvServer) HandleBatch(op *proto.Op) result {
 	for i, entry := range op.Entries {
 		// 构造子 Op
 		subOp := &proto.Op{
-			Type:     entry.Type,
-			Key:      entry.Key,
-			Value:    entry.Value,
-			ClientId: op.ClientId,
+			Type:      entry.Type,
+			Key:       entry.Key,
+			Value:     entry.Value,
+			ClientId:  op.ClientId,
 			RequestId: op.RequestId + int64(i+1),
 		}
 		switch entry.Type {
@@ -253,6 +262,7 @@ func (kv *KvServer) HandleBatch(op *proto.Op) result {
 	return res
 }
 
+// 移除过期的建
 func (kv *KvServer) expireByKey(key string) {
 	fmt.Printf("[lease] expireByKey: key=%s\n", key)
 	rev := kv.mvcc.Delete(key)

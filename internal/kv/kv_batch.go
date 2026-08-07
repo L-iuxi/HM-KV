@@ -1,6 +1,7 @@
 package kv
 
 import (
+	types "TicketX/internal/type"
 	"TicketX/proto"
 	"context"
 
@@ -26,7 +27,7 @@ func (kv *KvServer) Batch(ctx context.Context, req *proto.BatchRequest) (*proto.
 		}, nil
 	}
 
-	ch := make(chan result, 1)
+	ch := make(chan types.Result, 1)
 
 	kv.mu.Lock()
 	kv.waitCh[int64(index)] = ch

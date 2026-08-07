@@ -10,11 +10,12 @@ service Kv {
     rpc Get(GetRequest) returns (GetReply);
     rpc Delete(DeleteRequest) returns (DeleteReply);
     rpc Batch(BatchRequest) returns (BatchReply);
-    rpc Watch(WatchRequest)
-        returns (stream WatchResponse);
+    rpc Watch(WatchRequest) returns (stream WatchResponse);
     rpc Compact(CompactRequest) returns (CompactReply);
     rpc KeepAlive(KeepAliveRequest) returns (KeepAliveReply);
     rpc Grant(GrantRequest) returns (GrantReply);
+    rpc AddMember(AddMemberRequest) returns(AddMemberResponse);
+    rpc DeleteMember(DeleteMemberRequest) returns(DeleteMemberResponse);
 }
 
 //raft相关接口
@@ -131,7 +132,7 @@ message KeepAliveReply{
     int64 leader_id = 2;
 }
 
-//grant 请求：创建 lease
+//创建 lease
 message GrantRequest{
     int64 ttl = 1;
 }
@@ -162,6 +163,32 @@ message BatchReply{
      int64 leader_id = 3;
 }
 
+//添加集群成员
+message AddMemberRequest {
+    int32 id = 1;
+    string address = 2;
+}
+
+message AddMemberResponse {
+    ErrorType error = 1;
+    int64 leader_id = 2;
+}
+
+message Memberchange {
+    int32 id = 1;
+    string address = 2;
+    string type = 3;
+}
+
+//移除集群成员
+message DeleteMemberRequest {
+    int32 id = 1;
+}
+
+message DeleteMemberResponse {
+    ErrorType error = 1;
+    int64 leader_id = 2;
+}
  
 message RequestVoteArgs {
     int32 term = 1;
@@ -220,4 +247,5 @@ message Op {
   int64 expire_at = 7;
   repeated Entry entries = 8; //Batch 用
   int64 lease_id = 9;
+  Memberchange  member_change = 10;
 }
