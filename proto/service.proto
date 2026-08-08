@@ -10,21 +10,21 @@ service Kv {
     rpc Get(GetRequest) returns (GetReply);
     rpc Delete(DeleteRequest) returns (DeleteReply);
     rpc Batch(BatchRequest) returns (BatchReply);
-    rpc Watch(WatchRequest) returns (stream WatchResponse);
+    rpc Watch(WatchRequest) returns (stream WatchReply);
     rpc Compact(CompactRequest) returns (CompactReply);
     rpc KeepAlive(KeepAliveRequest) returns (KeepAliveReply);
     rpc Grant(GrantRequest) returns (GrantReply);
-    rpc AddMember(AddMemberRequest) returns(AddMemberResponse);
-    rpc DeleteMember(DeleteMemberRequest) returns(DeleteMemberResponse);
+    rpc AddMember(AddMemberRequest) returns(AddMemberReply);
+    rpc DeleteMember(DeleteMemberRequest) returns(DeleteMemberReply);
+    rpc Txn(TxnRequest) returns(TxnReply);
 }
 
 //raft相关接口
 service Raft {
-
     // 选举
     rpc RequestVote (RequestVoteArgs) returns (RequestVoteReply);
 
-    // 心跳 / 日志复制（AppendEntries）
+    // 心跳 / 日志复制
     rpc AppendEntries (HeartbeatArgs) returns (HeartbeatReply);
 
     // 快照
@@ -41,7 +41,38 @@ enum ErrorType{
     INVALID_ARGUMENT=6;
     MEMBER_ALREADY_EXISTS = 7;
     MEMBER_NOT_FOUND = 8;
+    TIMEOUT = 9;
 }
+
+enum CompareType{
+    LESS = 0;
+    GREATER = 1;
+    EQUAL = 2;
+    NOT_EQUAL = 3;
+}
+
+message Compare{
+    string key = 1;
+    CompareType compare_type = 2;
+    int64 version = 3;//比较目标version
+}
+
+message TxnRequest{
+    repeated Compare compare = 1;
+    repeated Entry success = 2;//compare全过执行
+    repeated Entry failed = 3;//compatre失败执行
+    int64 client_id = 4;
+    int64 request_id = 5;
+}
+
+message TxnReply{
+    ErrorType error = 1;
+    repeated KeyValue results = 2;
+    int64 leader_id = 3;
+    bool succeeded = 4;
+}
+
+//txn事务请求
 
 //watch请求
 message WatchRequest{
@@ -51,7 +82,7 @@ message WatchRequest{
 }
 
 //watch回复
-message WatchResponse{
+message WatchReply{
     string key = 1;
     string value = 2;
     int64 revision = 3;
@@ -151,6 +182,7 @@ message Entry{
     string key = 2;
     string value = 3;
     int64 expire_at = 4;//过期时间
+    int64 lease_id = 5;
 }
 
 //客户端批量提交
@@ -172,7 +204,7 @@ message AddMemberRequest {
     string address = 2;
 }
 
-message AddMemberResponse {
+message AddMemberReply {
     ErrorType error = 1;
     int64 leader_id = 2;
 }
@@ -188,7 +220,7 @@ message DeleteMemberRequest {
     int32 id = 1;
 }
 
-message DeleteMemberResponse {
+message DeleteMemberReply {
     ErrorType error = 1;
     int64 leader_id = 2;
 }
@@ -241,14 +273,21 @@ message InstallSnapshotReply {
 }
 
 message Op {
-  string type = 1;
-  string key = 2;
-  string value = 3;
-  int64 client_id = 4;
-  int64 request_id = 5;
-  int64 expected_version = 6;
-  int64 expire_at = 7;
-  repeated Entry entries = 8; //Batch 用
-  int64 lease_id = 9;
-  Memberchange  member_change = 10;
+    string type = 1;
+    string key = 2;
+    string value = 3;
+    int64 client_id = 4;
+    int64 request_id = 5;
+    int64 expected_version = 6;
+    int64 expire_at = 7;
+    //batch
+    repeated Entry entries = 8; 
+    //lease
+    int64 lease_id = 9;
+    //member_change
+    Memberchange  member_change = 10;
+    //txn
+    repeated Compare compares = 11;
+    repeated Entry success_entries = 12;
+    repeated Entry failed_entries = 13;
 }
