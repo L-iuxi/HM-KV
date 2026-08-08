@@ -1,14 +1,15 @@
 package kv
 
 import (
-	"TicketX/proto"
 	types "TicketX/internal/type"
+	"TicketX/proto"
 	"context"
+	"time"
 
 	po "google.golang.org/protobuf/proto"
 )
 
-func (kv *KvServer) AddMember(ctx context.Context, req *proto.AddMemberRequest) (*proto.AddMemberResponse, error) {
+func (kv *KvServer) AddMember(ctx context.Context, req *proto.AddMemberRequest) (*proto.AddMemberReply, error) {
 	change := &proto.Memberchange{
 		Type:    "add",
 		Id:      req.Id,
@@ -23,7 +24,7 @@ func (kv *KvServer) AddMember(ctx context.Context, req *proto.AddMemberRequest) 
 	data, _ := po.Marshal(op)
 	index, _, isleader, leader := kv.rf.Start(data)
 	if !isleader {
-		return &proto.AddMemberResponse{
+		return &proto.AddMemberReply{
 			Error:    proto.ErrorType_WRONG_LEADER,
 			LeaderId: leader,
 		}, nil
@@ -35,15 +36,24 @@ func (kv *KvServer) AddMember(ctx context.Context, req *proto.AddMemberRequest) 
 	kv.waitCh[int64(index)] = ch
 	kv.mu.Unlock()
 
-	res := <-ch
+	select {
+	case res := <-ch:
+		return &proto.AddMemberReply{
+			Error:    res.Err,
+			LeaderId: leader,
+		}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
 
-	return &proto.AddMemberResponse{
-		Error:    res.Err,
-		LeaderId: leader,
-	}, nil
+	case <-time.After(5 * time.Second):
+		return &proto.AddMemberReply{
+			Error: proto.ErrorType_TIMEOUT,
+		}, nil
+	}
+
 }
 
-func (kv *KvServer) deleteMember(ctx context.Context, req *proto.DeleteMemberRequest) (*proto.DeleteMemberResponse, error) {
+func (kv *KvServer) deleteMember(ctx context.Context, req *proto.DeleteMemberRequest) (*proto.DeleteMemberReply, error) {
 	change := &proto.Memberchange{
 		Type: "delete",
 		Id:   req.Id,
@@ -57,7 +67,7 @@ func (kv *KvServer) deleteMember(ctx context.Context, req *proto.DeleteMemberReq
 	data, _ := po.Marshal(op)
 	index, _, isleader, leader := kv.rf.Start(data)
 	if !isleader {
-		return &proto.DeleteMemberResponse{
+		return &proto.DeleteMemberReply{
 			Error:    proto.ErrorType_WRONG_LEADER,
 			LeaderId: leader,
 		}, nil
@@ -71,7 +81,7 @@ func (kv *KvServer) deleteMember(ctx context.Context, req *proto.DeleteMemberReq
 
 	res := <-ch
 
-	return &proto.DeleteMemberResponse{
+	return &proto.DeleteMemberReply{
 		Error:    res.Err,
 		LeaderId: leader,
 	}, nil

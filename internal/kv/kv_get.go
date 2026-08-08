@@ -65,15 +65,24 @@ func (kv *KvServer) Get(ctx context.Context, req *proto.GetRequest) (*proto.GetR
 	kv.getCh[int64(index)] = ch
 	kv.mu.Unlock()
 
-	res := <-ch
+	select {
+	case res := <-ch:
+		var kvs []*proto.KeyValue
+		if res.Err == proto.ErrorType_OK {
+			kvs = []*proto.KeyValue{{Key: op.Key, Value: res.Value, Version: res.Version}}
+		}
+		return &proto.GetReply{
+			Error:   res.Err,
+			Kvs:     kvs,
+			Version: res.Version,
+		}, nil
 
-	var kvs []*proto.KeyValue
-	if res.Err == proto.ErrorType_OK {
-		kvs = []*proto.KeyValue{{Key: op.Key, Value: res.Value, Version: res.Version}}
+	case <-ctx.Done():
+		return nil, ctx.Err()
+
+	case <-time.After(5 * time.Second):
+		return &proto.GetReply{
+			Error: proto.ErrorType_TIMEOUT,
+		}, nil
 	}
-	return &proto.GetReply{
-		Error:   res.Err,
-		Kvs:     kvs,
-		Version: res.Version,
-	}, nil
 }

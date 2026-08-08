@@ -28,12 +28,21 @@ func (kv *KvServer) KeepAlive(ctx context.Context, req *proto.KeepAliveRequest) 
 	kv.waitCh[int64(index)] = ch
 	kv.mu.Unlock()
 
-	res := <-ch
+	select {
+	case res := <-ch:
+		return &proto.KeepAliveReply{
+			Error:    res.Err,
+			LeaderId: leader,
+		}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
 
-	return &proto.KeepAliveReply{
-		Error:    res.Err,
-		LeaderId: leader,
-	}, nil
+	case <-time.After(5 * time.Second):
+		return &proto.KeepAliveReply{
+			Error: proto.ErrorType_TIMEOUT,
+		}, nil
+	}
+
 }
 
 // HandleKeepAlive 续约：更新 key 对应 lease 的过期时间
@@ -65,12 +74,22 @@ func (kv *KvServer) Grant(ctx context.Context, req *proto.GrantRequest) (*proto.
 	kv.waitCh[int64(index)] = ch
 	kv.mu.Unlock()
 
-	res := <-ch
+	select {
+	case res := <-ch:
 
-	return &proto.GrantReply{
-		Error:   res.Err,
-		LeaseId: res.LeaseID,
-	}, nil
+		return &proto.GrantReply{
+			Error:   res.Err,
+			LeaseId: res.LeaseID,
+		}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+
+	case <-time.After(5 * time.Second):
+		return &proto.GrantReply{
+			Error: proto.ErrorType_TIMEOUT,
+		}, nil
+	}
+
 }
 
 // HandleGrant 创建 lease（Raft apply）

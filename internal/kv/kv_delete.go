@@ -4,6 +4,7 @@ import (
 	types "TicketX/internal/type"
 	"TicketX/proto"
 	"context"
+	"time"
 
 	po "google.golang.org/protobuf/proto"
 )
@@ -29,11 +30,20 @@ func (kv *KvServer) Delete(ctx context.Context, req *proto.DeleteRequest) (*prot
 	kv.waitCh[int64(index)] = ch
 	kv.mu.Unlock()
 
-	res := <-ch
+	select {
+	case res := <-ch:
 
-	return &proto.DeleteReply{
-		Error:    res.Err,
-		LeaderId: leader,
-		Version:  res.Version,
-	}, nil
+		return &proto.DeleteReply{
+			Error:   res.Err,
+			Version: res.Version,
+		}, nil
+
+	case <-ctx.Done():
+		return nil, ctx.Err()
+
+	case <-time.After(5 * time.Second):
+		return &proto.DeleteReply{
+			Error: proto.ErrorType_TIMEOUT,
+		}, nil
+	}
 }

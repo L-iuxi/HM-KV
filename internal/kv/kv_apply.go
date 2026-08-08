@@ -2,8 +2,6 @@ package kv
 
 import (
 	"TicketX/internal/raft"
-	types "TicketX/internal/type"
-	"TicketX/internal/watch"
 	"TicketX/proto"
 	"fmt"
 	"time"
@@ -125,6 +123,12 @@ func (kv *KvServer) applyBatch(msg []raft.ApplyMsg) {
 					ch <- res
 					delete(kv.waitCh, m.CommandIndex)
 				}
+			case "Txn":
+				res := kv.HandleTxn(&op)
+				if ch, ok := kv.txnWaitCh[m.CommandIndex]; ok {
+					ch <- res
+					delete(kv.txnWaitCh, m.CommandIndex)
+				}
 			}
 
 			kv.mu.Unlock()
@@ -138,155 +142,4 @@ func (kv *KvServer) applyBatch(msg []raft.ApplyMsg) {
 		}
 
 	}
-}
-
-func (kv *KvServer) HandlePut(op *proto.Op) types.Result {
-	// 去重
-	last := kv.lastRequest[op.ClientId]
-	if op.RequestId <= last {
-		return kv.lastResult[int(op.ClientId)]
-	}
-
-	rev, err := kv.mvcc.PutWithCAS(op.Key, op.Value, op.ExpectedVersion)
-	if err != nil {
-		latestRev, _ := kv.mvcc.GetLatest(op.Key)
-		res := result{
-			Err:     proto.ErrorType_WRONG_VERSION,
-			Version: latestRev,
-		}
-		kv.lastResult[int(op.ClientId)] = res
-		return res
-	}
-
-	kv.lastRequest[op.ClientId] = op.RequestId //记录该clientid最后一个请求结果
-
-	// 如果指定了已有 lease，直接绑定（多 key 共享 lease）
-	if op.LeaseId != 0 {
-		_ = kv.leaseMgr.Attach(op.Key, op.LeaseId)
-	} else if op.ExpireAt != 0 {
-		// 带 TTL：创建新 lease 并绑定
-		now := time.Now().Unix()
-		leaseID := kv.leaseMgr.Grant(op.ExpireAt, now)
-		_ = kv.leaseMgr.Attach(op.Key, leaseID)
-	}
-
-	fmt.Printf("[kv] Put key=%s rev=%d\n", op.Key, rev)
-	kv.watcherManager.Notify(watch.WatchEvent{
-		Type:     "Put",
-		Key:      op.Key,
-		Value:    op.Value,
-		Revision: rev,
-	})
-	res := result{
-		Err:     proto.ErrorType_OK,
-		Version: rev,
-	}
-	kv.lastResult[int(op.ClientId)] = res
-
-	return res
-
-}
-
-func (kv *KvServer) HandleGet(op *proto.Op) result {
-	value, rev, err := kv.mvcc.Get(op.Key, op.ExpectedVersion)
-	if err != nil {
-		return result{Err: proto.ErrorType_KEY_NOT_EXIST}
-	}
-	return result{
-		Value:   value,
-		Version: rev,
-		Err:     proto.ErrorType_OK,
-	}
-}
-
-func (kv *KvServer) HandleDelete(op *proto.Op) result {
-	// 去重
-	last := kv.lastRequest[op.ClientId]
-	if op.RequestId <= last {
-		return kv.lastResult[int(op.ClientId)]
-	}
-
-	rev := kv.mvcc.Delete(op.Key)
-
-	fmt.Printf("[kv] Delete key=%s rev=%d\n", op.Key, rev)
-	kv.lastRequest[op.ClientId] = op.RequestId //记录该clientid最后一个请求结果
-
-	kv.watcherManager.Notify(watch.WatchEvent{
-		Type:     "Delete",
-		Key:      op.Key,
-		Value:    op.Value,
-		Revision: rev,
-	})
-
-	res := result{
-		Err:     proto.ErrorType_OK,
-		Version: rev,
-	}
-	kv.lastResult[int(op.ClientId)] = res
-	return res
-}
-
-func findLE(revs []int64, target int64) int64 {
-	var res int64 = 0
-
-	for _, r := range revs {
-		if r <= target {
-			res = r
-		} else {
-			break
-		}
-	}
-
-	return res
-}
-
-// 客户端批量提交，多个 Entry 打包成一个 Raft entry，原子执行
-func (kv *KvServer) HandleBatch(op *proto.Op) result {
-	// 去重
-	last := kv.lastRequest[op.ClientId]
-	if op.RequestId <= last {
-		return kv.lastResult[int(op.ClientId)]
-	}
-
-	for i, entry := range op.Entries {
-		// 构造子 Op
-		subOp := &proto.Op{
-			Type:      entry.Type,
-			Key:       entry.Key,
-			Value:     entry.Value,
-			ClientId:  op.ClientId,
-			RequestId: op.RequestId + int64(i+1),
-		}
-		switch entry.Type {
-		case "Put":
-			kv.HandlePut(subOp)
-		case "Delete":
-			kv.HandleDelete(subOp)
-		}
-	}
-
-	kv.lastRequest[op.ClientId] = op.RequestId
-
-	res := result{
-		Err:     proto.ErrorType_OK,
-		Version: kv.mvcc.CurrentRev(),
-	}
-	kv.lastResult[int(op.ClientId)] = res
-	return res
-}
-
-// 移除过期的建
-func (kv *KvServer) expireByKey(key string) {
-	fmt.Printf("[lease] expireByKey: key=%s\n", key)
-	rev := kv.mvcc.Delete(key)
-	id, err := kv.leaseMgr.GetLeaseIDByKey(key)
-	if err == nil {
-		_ = kv.leaseMgr.RemoveLease(id)
-		fmt.Printf("[lease] expireByKey: removed lease %d for key %s\n", id, key)
-	}
-	kv.watcherManager.Notify(watch.WatchEvent{
-		Type:     "Delete",
-		Key:      key,
-		Revision: rev,
-	})
 }

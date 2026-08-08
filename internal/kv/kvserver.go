@@ -118,4 +118,5 @@ func (kv *KvServer) InitKvserver(peers []string, me int) {
 	kv.getCh = make(map[int64]chan result)
 	//requestid对应请求结果
 	kv.lastResult = make(map[int]result)
+	kv.lastTxnResult = make(map[int]TxnResult)
 }

@@ -10,7 +10,7 @@ func (kv *KvServer) Watch(req *proto.WatchRequest, stream proto.Kv_WatchServer) 
 
 	if req.StartReversion > 0 && req.StartReversion <= kv.watcherManager.GetCompactRevision() {
 		err := stream.Send(
-			&proto.WatchResponse{
+			&proto.WatchReply{
 				Err: proto.ErrorType_COMPACT_ERROR,
 			},
 		)
@@ -32,7 +32,7 @@ func (kv *KvServer) Watch(req *proto.WatchRequest, stream proto.Kv_WatchServer) 
 	for ev := range watcher.Ch {
 
 		err := stream.Send(
-			&proto.WatchResponse{
+			&proto.WatchReply{
 				Key:      ev.Key,
 				Value:    ev.Value,
 				Revision: ev.Revision,
@@ -42,7 +42,6 @@ func (kv *KvServer) Watch(req *proto.WatchRequest, stream proto.Kv_WatchServer) 
 		)
 
 		if err != nil {
-
 
 			return err
 		}

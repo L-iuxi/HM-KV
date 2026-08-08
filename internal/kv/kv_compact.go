@@ -4,6 +4,7 @@ import (
 	types "TicketX/internal/type"
 	"TicketX/proto"
 	"context"
+	"time"
 
 	po "google.golang.org/protobuf/proto"
 )
@@ -31,11 +32,21 @@ func (kv *KvServer) Compact(ctx context.Context, req *proto.CompactRequest) (*pr
 	kv.waitCh[int64(index)] = ch
 	kv.mu.Unlock()
 
-	res := <-ch
-	return &proto.CompactReply{
-		Error:    res.Err,
-		LeaderId: res.Version, //复用 version 字段传 leaderId
-	}, nil
+	select {
+	case res := <-ch:
+		return &proto.CompactReply{
+			Error:    res.Err,
+			LeaderId: res.Version, //复用 version 字段传 leaderId
+		}, nil
+
+	case <-ctx.Done():
+		return nil, ctx.Err()
+
+	case <-time.After(5 * time.Second):
+		return &proto.CompactReply{
+			Error: proto.ErrorType_TIMEOUT,
+		}, nil
+	}
 }
 
 // HandleCompact Raft apply 时执行 compact

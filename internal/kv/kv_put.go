@@ -3,6 +3,7 @@ package kv
 import (
 	"TicketX/proto"
 	"context"
+	"time"
 
 	po "google.golang.org/protobuf/proto"
 )
@@ -33,11 +34,21 @@ func (kv *KvServer) Put(ctx context.Context, req *proto.PutRequest) (*proto.PutR
 	kv.waitCh[int64(index)] = ch
 	kv.mu.Unlock()
 
-	res := <-ch
+	select {
+	case res := <-ch:
+		return &proto.PutReply{
+			Error:    res.Err,
+			Version:  res.Version,
+			LeaderId: leader,
+		}, nil
 
-	return &proto.PutReply{
-		Error:    res.Err,
-		Version:  res.Version,
-		LeaderId: leader,
-	}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+
+	case <-time.After(5 * time.Second):
+		return &proto.PutReply{
+			Error: proto.ErrorType_TIMEOUT,
+		}, nil
+	}
+
 }

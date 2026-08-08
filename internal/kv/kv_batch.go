@@ -4,6 +4,7 @@ import (
 	types "TicketX/internal/type"
 	"TicketX/proto"
 	"context"
+	"time"
 
 	po "google.golang.org/protobuf/proto"
 )
@@ -33,10 +34,19 @@ func (kv *KvServer) Batch(ctx context.Context, req *proto.BatchRequest) (*proto.
 	kv.waitCh[int64(index)] = ch
 	kv.mu.Unlock()
 
-	res := <-ch
+	select {
+	case res := <-ch:
+		return &proto.BatchReply{
+			Success: res.Err == proto.ErrorType_OK,
+			Error:   res.Err,
+		}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
 
-	return &proto.BatchReply{
-		Success: res.Err == proto.ErrorType_OK,
-		Error:   res.Err,
-	}, nil
+	case <-time.After(5 * time.Second):
+		return &proto.BatchReply{
+			Error: proto.ErrorType_TIMEOUT,
+		}, nil
+	}
+
 }
