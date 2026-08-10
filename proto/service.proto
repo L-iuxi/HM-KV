@@ -17,6 +17,7 @@ service Kv {
     rpc AddMember(AddMemberRequest) returns(AddMemberReply);
     rpc DeleteMember(DeleteMemberRequest) returns(DeleteMemberReply);
     rpc Txn(TxnRequest) returns(TxnReply);
+    rpc Lock(LockRequest) returns(LockReply);
 }
 
 //raft相关接口
@@ -42,6 +43,7 @@ enum ErrorType{
     MEMBER_ALREADY_EXISTS = 7;
     MEMBER_NOT_FOUND = 8;
     TIMEOUT = 9;
+    LEASE_NO_EXIST = 10;
 }
 
 enum CompareType{
@@ -57,6 +59,7 @@ message Compare{
     int64 version = 3;//比较目标version
 }
 
+//txn事务请求
 message TxnRequest{
     repeated Compare compare = 1;
     repeated Entry success = 2;//compare全过执行
@@ -72,7 +75,17 @@ message TxnReply{
     bool succeeded = 4;
 }
 
-//txn事务请求
+//分布式锁
+message LockRequest {
+    string key = 1;
+    int64 lease_id = 2;
+}
+
+message LockReply {
+    bool success = 1;
+    int64 revision = 2;
+    ErrorType error = 3;
+}
 
 //watch请求
 message WatchRequest{

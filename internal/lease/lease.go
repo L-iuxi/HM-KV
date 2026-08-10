@@ -99,6 +99,19 @@ func (lm *LeaseManager) GetLeaseIDByKey(key string) (int64, error) {
 	return id, nil
 }
 
+// 根据 leaseID 找 key
+func (lm *LeaseManager) GetLease(id int64) (*Lease, error) {
+	lm.RLock()
+	defer lm.RUnlock()
+
+	lease, ok := lm.leases[id]
+	if !ok {
+		return nil, errLeaseNotFound
+	}
+
+	return lease, nil
+}
+
 // 续约
 func (lm *LeaseManager) KeepAliveByKey(key string, now int64) error {
 	lm.Lock()

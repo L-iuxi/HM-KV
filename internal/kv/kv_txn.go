@@ -1,6 +1,7 @@
 package kv
 
 import (
+	"TicketX/internal/txn"
 	"TicketX/proto"
 	"context"
 	"time"
@@ -10,21 +11,29 @@ import (
 
 func (kv *KvServer) Txn(ctx context.Context, req *proto.TxnRequest) (*proto.TxnReply, error) {
 
-	op := &proto.Op{
-		Type:           "Txn",
-		Compares:       req.Compare,
-		SuccessEntries: req.Success,
-		FailedEntries:  req.Failed,
-		ClientId:       req.ClientId,
-		RequestId:      req.RequestId,
+	t := txn.New()
+
+	t.If(req.Compare...).
+		Then(req.Success...).
+		Else(req.Failed...)
+
+	op := t.BuildOp(
+		req.ClientId,
+		req.RequestId,
+	)
+
+	data, err := po.Marshal(op)
+	if err != nil {
+		return nil, err
 	}
 
-	data, _ := po.Marshal(op)
-	index, _, isleader, leader := kv.rf.Start(data)
-	if !isleader {
+	index, _, isLeader, leader := kv.rf.Start(data)
+
+	if !isLeader {
 		return &proto.TxnReply{
 			Error:    proto.ErrorType_WRONG_LEADER,
-			LeaderId: leader}, nil
+			LeaderId: leader,
+		}, nil
 	}
 
 	ch := make(chan TxnResult, 1)
@@ -50,4 +59,5 @@ func (kv *KvServer) Txn(ctx context.Context, req *proto.TxnRequest) (*proto.TxnR
 			Error: proto.ErrorType_TIMEOUT,
 		}, nil
 	}
+
 }
