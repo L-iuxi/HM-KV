@@ -4,6 +4,7 @@ import (
 	"TicketX/internal/config"
 	"TicketX/internal/db"
 	"TicketX/internal/lease"
+	"TicketX/internal/lock"
 	"TicketX/internal/mvcc"
 	"TicketX/internal/raft"
 	"TicketX/internal/watch"
@@ -118,5 +119,7 @@ func (kv *KvServer) InitKvserver(peers []string, me int) {
 	kv.getCh = make(map[int64]chan result)
 	//requestid对应请求结果
 	kv.lastResult = make(map[int]result)
-	kv.lastTxnResult = make(map[int]TxnResult)
+	kv.lastTxnResult = make(map[int]txnresult)
+
+	kv.loc = lock.NewLockManager(kv.leaseMgr, kv.mvcc, kv.watcherManager)
 }

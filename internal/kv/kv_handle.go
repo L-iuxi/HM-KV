@@ -182,14 +182,14 @@ func (kv *KvServer) expireByKey(key string) {
 }
 
 // 处理事务
-func (kv *KvServer) HandleTxn(op *proto.Op) TxnResult {
+func (kv *KvServer) HandleTxn(op *proto.Op) txnresult {
 	// 去重
 	last := kv.lastRequest[op.ClientId]
 	if op.RequestId <= last {
 		return kv.lastTxnResult[int(op.ClientId)]
 	}
 
-	result := TxnResult{
+	result := txnresult{
 		Results: make([]*proto.KeyValue, 0),
 		Err:     proto.ErrorType_OK,
 	}

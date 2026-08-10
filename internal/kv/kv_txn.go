@@ -1,7 +1,7 @@
 package kv
 
 import (
-	"TicketX/internal/txn"
+	types "TicketX/internal/type"
 	"TicketX/proto"
 	"context"
 	"time"
@@ -11,53 +11,56 @@ import (
 
 func (kv *KvServer) Txn(ctx context.Context, req *proto.TxnRequest) (*proto.TxnReply, error) {
 
-	t := txn.New()
+	op := &proto.Op{
+		Type:           "Txn",
+		Compares:       req.Compare,
+		SuccessEntries: req.Success,
+		FailedEntries:  req.Failed,
+		ClientId:       req.ClientId,
+		RequestId:      req.RequestId,
+	}
 
-	t.If(req.Compare...).
-		Then(req.Success...).
-		Else(req.Failed...)
+	result, err := kv.ExecuteTxn(op)
 
-	op := t.BuildOp(
-		req.ClientId,
-		req.RequestId,
-	)
-
-	data, err := po.Marshal(op)
 	if err != nil {
 		return nil, err
 	}
 
-	index, _, isLeader, leader := kv.rf.Start(data)
+	return &proto.TxnReply{
+		Error:     result.Err,
+		Results:   result.Results,
+		Succeeded: result.Succeeded,
+	}, nil
+}
+
+func (kv *KvServer) ExecuteTxn(op *proto.Op) (types.TxnResult, error) {
+
+	data, err := po.Marshal(op)
+	if err != nil {
+		return types.TxnResult{}, err
+	}
+
+	index, _, isLeader, _ := kv.rf.Start(data)
 
 	if !isLeader {
-		return &proto.TxnReply{
-			Error:    proto.ErrorType_WRONG_LEADER,
-			LeaderId: leader,
+		return types.TxnResult{
+			Err: proto.ErrorType_WRONG_LEADER,
 		}, nil
 	}
 
-	ch := make(chan TxnResult, 1)
+	ch := make(chan types.TxnResult, 1)
 
 	kv.mu.Lock()
 	kv.txnWaitCh[int64(index)] = ch
 	kv.mu.Unlock()
 
 	select {
-	case res := <-ch:
-		return &proto.TxnReply{
-			Error:     res.Err,
-			Results:   res.Results,
-			LeaderId:  leader,
-			Succeeded: res.Succeeded,
-		}, nil
-
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	case result := <-ch:
+		return result, nil
 
 	case <-time.After(5 * time.Second):
-		return &proto.TxnReply{
-			Error: proto.ErrorType_TIMEOUT,
+		return types.TxnResult{
+			Err: proto.ErrorType_TIMEOUT,
 		}, nil
 	}
-
 }

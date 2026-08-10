@@ -23,3 +23,11 @@ type Result struct {
 	LeaseID int64
 	Err     proto.ErrorType
 }
+
+// Txn事务的结果
+type TxnResult struct {
+	Err       proto.ErrorType
+	Succeeded bool
+	Version   int64
+	Results   []*proto.KeyValue
+}

@@ -3,6 +3,7 @@ package kv
 import (
 	"TicketX/internal/config"
 	"TicketX/internal/lease"
+	"TicketX/internal/lock"
 	"TicketX/internal/mvcc"
 	"TicketX/internal/raft"
 	types "TicketX/internal/type"
@@ -13,7 +14,7 @@ import (
 )
 
 type result = types.Result
-
+type txnresult = types.TxnResult
 type KvServer struct {
 	mu sync.Mutex
 	proto.UnimplementedKvServer
@@ -21,12 +22,12 @@ type KvServer struct {
 	waitCh  map[int64]chan result //确保put请求成功commit的管道
 
 	getCh         map[int64]chan result //get fallback: ReadIndex 失败时走 Raft 日志
-	txnWaitCh     map[int64]chan TxnResult
+	txnWaitCh     map[int64]chan txnresult
 	lastRequest   map[int64]int64 //请求者对应的最后一个请求编号
 	rf            *raft.Raft
 	lastApplied   int64
 	lastResult    map[int]result    //上一次请求的结果
-	lastTxnResult map[int]TxnResult //上一次 Txn 请求的结果
+	lastTxnResult map[int]txnresult //上一次 Txn 请求的结果
 	leaseMgr      *lease.LeaseManager
 	mvcc          *mvcc.MVCC
 	cfg           *config.Config //配置
@@ -34,12 +35,8 @@ type KvServer struct {
 	watcherManager *watch.WatcherManager
 	eventNotifier  chan watch.WatchEvent
 	readyCh        chan struct{} // WAL 回放完成后关闭，读路径等待此管道
-}
-type TxnResult struct {
-	Err       proto.ErrorType
-	Succeeded bool
-	Version   int64
-	Results   []*proto.KeyValue
+
+	loc *lock.LockManager
 }
 
 // KvEngine gRPC 服务接口

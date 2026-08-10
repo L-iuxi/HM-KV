@@ -1,7 +1,7 @@
 package raft
 
 import (
-	"TicketX/internal/labgob"
+	"TicketX/internal/tool"
 	types "TicketX/internal/type"
 	"TicketX/internal/wal"
 	"bytes"
@@ -13,7 +13,7 @@ import (
 // 从WAL恢复投票状态
 func (rf *Raft) handleVoteRecord(data []byte) error {
 	var voteRecord VoteRecord
-	if err := labgob.NewDecoder(bytes.NewReader(data)).Decode(&voteRecord); err != nil {
+	if err := tool.NewDecoder(bytes.NewReader(data)).Decode(&voteRecord); err != nil {
 		return fmt.Errorf("failed to decode vote record: %v", err)
 	}
 
@@ -26,7 +26,7 @@ func (rf *Raft) handleVoteRecord(data []byte) error {
 // 从WAL恢复日志
 func (rf *Raft) appendLogEntry(data []byte) error {
 	var newLog types.LogEntry
-	if err := labgob.NewDecoder(bytes.NewReader(data)).Decode(&newLog); err != nil {
+	if err := tool.NewDecoder(bytes.NewReader(data)).Decode(&newLog); err != nil {
 		return fmt.Errorf("failed to decode vote record: %v", err)
 	}
 
@@ -93,7 +93,7 @@ func (rf *Raft) LoadFromWAL() error {
 // 把日志写入WAl
 func (rf *Raft) persistEntry(entry types.LogEntry) {
 	var buf bytes.Buffer
-	if err := labgob.NewEncoder(&buf).Encode(entry); err != nil {
+	if err := tool.NewEncoder(&buf).Encode(entry); err != nil {
 		fmt.Printf("Failed to encode log entry: %v\n", err)
 	}
 	if err := rf.wal.Write(wal.RecTypeEntry, buf.Bytes()); err != nil {
@@ -112,7 +112,7 @@ func (rf *Raft) persistVote(term int64, candidateId int64, voteGranted bool) err
 	}
 
 	var buf bytes.Buffer
-	if err := labgob.NewEncoder(&buf).Encode(voteRecord); err != nil {
+	if err := tool.NewEncoder(&buf).Encode(voteRecord); err != nil {
 		return fmt.Errorf("failed to encode vote record: %v", err)
 	}
 
@@ -134,7 +134,7 @@ func (rf *Raft) persistSnapshot(index int64, term int64, path string) error {
 
 	var buf bytes.Buffer
 
-	if err := labgob.NewEncoder(&buf).Encode(snapshotRecord); err != nil {
+	if err := tool.NewEncoder(&buf).Encode(snapshotRecord); err != nil {
 		return fmt.Errorf("failed to encode snapshot record: %v", err)
 	}
 
