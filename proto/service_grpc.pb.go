@@ -31,6 +31,7 @@ const (
 	Kv_DeleteMember_FullMethodName = "/proto.Kv/DeleteMember"
 	Kv_Txn_FullMethodName          = "/proto.Kv/Txn"
 	Kv_Lock_FullMethodName         = "/proto.Kv/Lock"
+	Kv_Unlock_FullMethodName       = "/proto.Kv/Unlock"
 )
 
 // KvClient is the client API for Kv service.
@@ -51,6 +52,7 @@ type KvClient interface {
 	DeleteMember(ctx context.Context, in *DeleteMemberRequest, opts ...grpc.CallOption) (*DeleteMemberReply, error)
 	Txn(ctx context.Context, in *TxnRequest, opts ...grpc.CallOption) (*TxnReply, error)
 	Lock(ctx context.Context, in *LockRequest, opts ...grpc.CallOption) (*LockReply, error)
+	Unlock(ctx context.Context, in *UnlockRequest, opts ...grpc.CallOption) (*UnlockReply, error)
 }
 
 type kvClient struct {
@@ -190,6 +192,16 @@ func (c *kvClient) Lock(ctx context.Context, in *LockRequest, opts ...grpc.CallO
 	return out, nil
 }
 
+func (c *kvClient) Unlock(ctx context.Context, in *UnlockRequest, opts ...grpc.CallOption) (*UnlockReply, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnlockReply)
+	err := c.cc.Invoke(ctx, Kv_Unlock_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // KvServer is the server API for Kv service.
 // All implementations must embed UnimplementedKvServer
 // for forward compatibility.
@@ -208,6 +220,7 @@ type KvServer interface {
 	DeleteMember(context.Context, *DeleteMemberRequest) (*DeleteMemberReply, error)
 	Txn(context.Context, *TxnRequest) (*TxnReply, error)
 	Lock(context.Context, *LockRequest) (*LockReply, error)
+	Unlock(context.Context, *UnlockRequest) (*UnlockReply, error)
 	mustEmbedUnimplementedKvServer()
 }
 
@@ -253,6 +266,9 @@ func (UnimplementedKvServer) Txn(context.Context, *TxnRequest) (*TxnReply, error
 }
 func (UnimplementedKvServer) Lock(context.Context, *LockRequest) (*LockReply, error) {
 	return nil, status.Error(codes.Unimplemented, "method Lock not implemented")
+}
+func (UnimplementedKvServer) Unlock(context.Context, *UnlockRequest) (*UnlockReply, error) {
+	return nil, status.Error(codes.Unimplemented, "method Unlock not implemented")
 }
 func (UnimplementedKvServer) mustEmbedUnimplementedKvServer() {}
 func (UnimplementedKvServer) testEmbeddedByValue()            {}
@@ -484,6 +500,24 @@ func _Kv_Lock_Handler(srv interface{}, ctx context.Context, dec func(interface{}
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Kv_Unlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnlockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KvServer).Unlock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Kv_Unlock_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KvServer).Unlock(ctx, req.(*UnlockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Kv_ServiceDesc is the grpc.ServiceDesc for Kv service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -534,6 +568,10 @@ var Kv_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Lock",
 			Handler:    _Kv_Lock_Handler,
+		},
+		{
+			MethodName: "Unlock",
+			Handler:    _Kv_Unlock_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
