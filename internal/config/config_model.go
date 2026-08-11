@@ -11,10 +11,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Default 返回带默认值的配置
-/*
-默认值->yaml配置覆盖->环境变量覆盖
-*/
+// Default 返回带默认值的配置。
+//
+// 配置加载优先级：
+//
+//	默认值（此处定义） < YAML 文件 < 环境变量 HMETCD_XXX
+//
+// TLS 默认关闭。要开启，在 YAML 中写 tls 段或用环境变量：
+//
+//	export HMETCD_TLS_CA=certs/ca.pem
+//	export HMETCD_TLS_CERT=certs/node-0.pem
+//	export HMETCD_TLS_KEY=certs/node-0-key.pem
+//	export HMETCD_TLS_MTLS=true
 func Default() *Config {
 	return &Config{
 		Node: NodeConfig{
@@ -41,6 +49,8 @@ func Default() *Config {
 			CheckInterval: 300 * time.Millisecond,
 			MinTTL:        1 * time.Second,
 		},
+		// TLS 默认不配置证书路径 → TLS 关闭，沿用 insecure 模式
+		TLS: TLSConfig{},
 	}
 }
 
@@ -118,6 +128,14 @@ func setField(field reflect.Value, val string) {
 				field.SetInt(n)
 			}
 		}
+		case reflect.Bool:
+			// bool 类型：true/1/yes → true，其余 → false
+			switch strings.ToLower(val) {
+			case "true", "1", "yes":
+				field.SetBool(true)
+			default:
+				field.SetBool(false)
+			}
 	case reflect.Slice:
 		// 切片：逗号分隔
 		if field.Type().Elem().Kind() == reflect.String {

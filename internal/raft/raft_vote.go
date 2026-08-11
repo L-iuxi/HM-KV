@@ -93,6 +93,20 @@ func (rf *Raft) startElection() {
 			}
 		}(clients[i], addr)
 	}
+
+	// 单节点集群（len(peers)==1）：上面循环跳过了自己，没有 goroutine
+	// 能检查 majority。需在此处检查：自己的一票已经够 majority。
+	if votes > len(rf.peers)/2 {
+		rf.mu.Lock()
+		rf.states = Leader
+		fmt.Printf("[raft] node %d: became Leader, term %d\n", rf.me, rf.term)
+		for j := range rf.peers {
+			rf.nextIndex[j] = rf.getLastIndex() + 1
+			rf.matchIndex[j] = 0
+		}
+		rf.mu.Unlock()
+		go rf.broadcastAppendEntries()
+	}
 }
 
 // sendRequestVoteTo 向目标 follower 发送投票请求。client 由调用方在锁内取出，避免无锁访问 rf.clients。

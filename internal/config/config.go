@@ -11,6 +11,15 @@ type Config struct {
 	KV     KVConfig     `yaml:"kv"`
 	Lease  LeaseConfig  `yaml:"lease"`
 	Server ServerConfig `yaml:"server"`
+	TLS    TLSConfig    `yaml:"tls"`
+}
+
+// TLSConfig TLS/mTLS 证书相关配置
+type TLSConfig struct {
+	CA   string `yaml:"ca"`   // CA 根证书路径（所有节点和客户端共用，用于验证对方证书）
+	Cert string `yaml:"cert"` // 本节点的公钥证书路径（TLS 握手时出示给对方）
+	Key  string `yaml:"key"`  // 本节点的私钥路径（绝密，只用于解密和签名，不传输）
+	MTLS bool   `yaml:"mtls"` // 是否开启双向认证（服务器也要求客户端出示证书）
 }
 
 // NodeConfig 节点信息

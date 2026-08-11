@@ -16,6 +16,10 @@ type ApplyMsg struct {
 	Command      interface{} //不关心类型
 	CommandValid bool
 
+	// Init 为 true 表示这是 Raft 初始化完成后的哨兵消息（WAL 回放完毕）。
+	// KV 层收到此消息后关闭 readyCh，解除 Get 的阻塞。
+	Init bool
+
 	SnapshotValid bool
 	Snapshot      []byte
 	SnapshotTerm  int32
@@ -45,6 +49,7 @@ type RaftConfig struct {
 	HeartbeatInterval  time.Duration // Leader 心跳间隔
 	RPCTimeout         time.Duration // Raft RPC 超时
 	ReadIndexTimeout   time.Duration // ReadIndex 确认超时
+	DataDir            string        // 数据目录，WAL 文件存储在此目录下
 }
 
 // Raft结构体
@@ -74,6 +79,15 @@ type Raft struct {
 	snap             []byte
 	wal              *wal.Wal
 	cfg              RaftConfig //配置参数
+
+	// tlsDialOpt 是 Raft 节点间 gRPC 连接的 TLS 配置。
+	// nil 表示不启用 TLS（insecure 模式）。
+	// 由 MakeRaft 从外部传入，在 addPeers 中使用。
+	tlsDialOpt grpc.DialOption
+
+	// stopCh 用于优雅关闭 Raft 的后台 goroutine（ticker、ApplyLoop）。
+	// 外部调用 Stop() 关闭此 channel，所有后台 goroutine 检测到后退出。
+	stopCh chan struct{}
 
 	proto.UnimplementedRaftServer
 

@@ -149,6 +149,23 @@ func (rf *Raft) broadcastAppendEntries() {
 
 		}(addr, i, pGen, readGen)
 	}
+
+	// 单节点集群：没有 peer goroutine 能推进 commitIndex。
+	// 领导的 matchIndex[me] = getLastIndex()，一票即多数，直接提交。
+	if len(peers) == 1 {
+		rf.mu.Lock()
+		rf.matchIndex[me] = rf.getLastIndex()
+		for N := rf.getLastIndex(); N > rf.commitIndex; N-- {
+			if N <= rf.lastSnapIndex {
+				continue
+			}
+			if rf.log[N-rf.lastSnapIndex].Term == int32(rf.term) {
+				rf.commitIndex = N
+				break
+			}
+		}
+		rf.mu.Unlock()
+	}
 }
 
 /*
