@@ -17,7 +17,6 @@ func (rf *Raft) broadcastAppendEntries() {
 		return
 	}
 
-	readGen := rf.readIndexGen
 	pGen := rf.peerGen
 	me := rf.me
 	peers := make([]string, len(rf.peers))
@@ -30,7 +29,7 @@ func (rf *Raft) broadcastAppendEntries() {
 			continue
 		}
 
-		go func(peerAddr string, peerIdx int, pGen int64, readGen int) {
+		go func(peerAddr string, peerIdx int, pGen int64) {
 			rf.mu.Lock()
 			// O(1) 校验：成员变更后 gen 不一致 / peer 已删除 / 地址被替换
 			if rf.peerGen != pGen || peerIdx >= len(rf.peers) || rf.peers[peerIdx] != peerAddr {
@@ -105,12 +104,14 @@ func (rf *Raft) broadcastAppendEntries() {
 			if reply.Success {
 				rf.lastHeartbeat = time.Now()
 
-				// ReadIndexcount受到超过半数就关闭
-				if rf.readIndexGate != nil && rf.readIndexTerm == rf.term && rf.readIndexGen == readGen {
-					rf.readIndexCounter++
-					if rf.readIndexCounter > len(rf.peers)/2 {
-						close(rf.readIndexGate)
-						rf.readIndexGate = nil
+				// ReadIndex：每个心跳成功响应推进所有等待中的请求
+				for gen, req := range rf.readIndexReqs {
+					if req.term == rf.term {
+						req.counter++
+						if req.counter > len(rf.peers)/2 {
+							close(req.gate)
+							delete(rf.readIndexReqs, gen)
+						}
 					}
 				}
 
@@ -147,7 +148,7 @@ func (rf *Raft) broadcastAppendEntries() {
 
 			}
 
-		}(addr, i, pGen, readGen)
+		}(addr, i, pGen)
 	}
 
 	// 单节点集群：没有 peer goroutine 能推进 commitIndex。

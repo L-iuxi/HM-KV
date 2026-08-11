@@ -13,8 +13,16 @@ import (
 	"os"
 	"time"
 
+	"google.golang.org/grpc"
 	po "google.golang.org/protobuf/proto"
 )
+
+// Close 关闭 KV 服务器：停止 Raft 后台 goroutine、关闭 Badger DB。
+// 用于测试中模拟崩溃后重启场景。
+func (kv *KvServer) Close() error {
+	kv.rf.Stop()
+	return kv.mvcc.Close()
+}
 
 func (kv *KvServer) GetCurrentRevesion() int64 {
 	return kv.mvcc.CurrentRev()
@@ -103,6 +111,26 @@ func (kv *KvServer) InitKvserver(peers []string, me int) {
 	applych := make(chan raft.ApplyMsg)
 	//提交请求管道
 	kv.applyCh = applych
+
+	// ---- Raft 节点间通信的 TLS 配置 ----
+	// 节点间通信（心跳、日志复制、快照、成员变更）走独立的 gRPC 连接。
+	// 如果配置了 TLS，这些连接同样需要加密 — Raft 流量包含实际数据。
+	//
+	// serverName 留空的原因：
+	//   节点间通信通常用 IP 地址（"192.168.1.10:50051"），
+	//   而证书 SAN 写的是生成时的 IP — 如果部署时 IP 变了，严格校验会失败。
+	//   留空 serverName = 只验证签名（是否由可信 CA 签发），不校验 SAN。
+	//   安全性稍降但灵活很多，适合集群内部通信。
+	//   如需更严格，可以把 serverName 设为节点在 peers 中的地址。
+	var raftTLSOpt grpc.DialOption
+	if kv.cfg.TLS.CA != "" {
+		opt, err := config.NewClientTLS(kv.cfg.TLS.CA, kv.cfg.TLS.Cert, kv.cfg.TLS.Key, "")
+		if err != nil {
+			panic(fmt.Sprintf("加载 Raft TLS 配置失败: %v", err))
+		}
+		raftTLSOpt = opt
+	}
+
 	//raft
 	kv.rf = raft.MakeRaft(applych, peers, int32(me), raft.RaftConfig{
 		ElectionTimeoutMin: kv.cfg.Raft.ElectionTimeoutMin,
@@ -110,7 +138,8 @@ func (kv *KvServer) InitKvserver(peers []string, me int) {
 		HeartbeatInterval:  kv.cfg.Raft.HeartbeatInterval,
 		RPCTimeout:         kv.cfg.Raft.RPCTimeout,
 		ReadIndexTimeout:   kv.cfg.Raft.ReadIndexTimeout,
-	})
+			DataDir:            fmt.Sprintf("%s/node-%d", kv.cfg.Node.DataDir, kv.cfg.Node.ID),
+	}, raftTLSOpt)
 	//put请求通道
 	kv.waitCh = make(map[int64]chan result)
 	//clientid上次请求表

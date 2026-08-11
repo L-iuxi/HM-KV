@@ -68,36 +68,48 @@ func (rf *Raft) getLastIndex() int32 {
 }
 
 // 确认自己能不能快速读
+// ReadIndex 确认当前节点仍是 Leader，返回 commitIndex 用于线性读。
+// 支持并发调用：每个请求有独立的 gate，心跳响应同时推进所有等待中的请求。
 func (rf *Raft) ReadIndex() (int32, error) {
 	rf.mu.Lock()
-	if rf.states != Leader { //当前已不是leader
+	if rf.states != Leader {
 		rf.mu.Unlock()
 		return 0, fmt.Errorf("not leader")
 	}
 
 	readIndex := rf.commitIndex
-	rf.readIndexTerm = rf.term
 	rf.readIndexGen++
-	rf.readIndexCounter = 1 //自己
-	rf.readIndexGate = make(chan struct{})
-		// 单节点：自己已构成多数派，无需等心跳响应
-		if rf.readIndexCounter > len(rf.peers)/2 {
-			close(rf.readIndexGate)
-			rf.readIndexGate = nil
-			rf.mu.Unlock()
-			return readIndex, nil
-		}
+	gen := rf.readIndexGen
+	req := &readIndexReq{
+		term:    rf.term,
+		counter: 1, // 自己一票
+		gate:    make(chan struct{}),
+	}
+	if rf.readIndexReqs == nil {
+		rf.readIndexReqs = make(map[int]*readIndexReq)
+	}
+	rf.readIndexReqs[gen] = req
+
+	// 单节点：自己已够多数派
+	if req.counter > len(rf.peers)/2 {
+		delete(rf.readIndexReqs, gen)
+		rf.mu.Unlock()
+		return readIndex, nil
+	}
 	rf.mu.Unlock()
 
-	//发起一次心跳，确认自己还是不是leader
+	// 发起心跳，触发 peer 响应推进所有 readIndexReqs
 	rf.heartbeat.Reset(0)
 
 	select {
-	case <-rf.readIndexGate:
+	case <-req.gate:
+		rf.mu.Lock()
+		delete(rf.readIndexReqs, gen)
+		rf.mu.Unlock()
 		return readIndex, nil
 	case <-time.After(rf.cfg.ReadIndexTimeout):
 		rf.mu.Lock()
-		rf.readIndexGate = nil
+		delete(rf.readIndexReqs, gen)
 		rf.mu.Unlock()
 		return 0, fmt.Errorf("read index timeout")
 	}

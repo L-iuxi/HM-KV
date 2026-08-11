@@ -91,10 +91,16 @@ type Raft struct {
 
 	proto.UnimplementedRaftServer
 
-	readIndexGate    chan struct{} //等待确认的通道
-	readIndexTerm    int32         //发起readindex请求时候的任期
-	readIndexCounter int           //受到的支持数
-	readIndexGen     int           //第几次readindex
+	readIndexGen  int                     // 单调递增的 ReadIndex 请求编号
+	readIndexReqs map[int]*readIndexReq   // 等待中的 ReadIndex 请求，key 为 gen
+}
+
+// readIndexReq 单个 ReadIndex 请求的状态。
+// Raft 节点支持并发 ReadIndex，每个请求用 gen 区分。
+type readIndexReq struct {
+	term    int32
+	counter int
+	gate    chan struct{}
 }
 
 // 请求投票的结构体

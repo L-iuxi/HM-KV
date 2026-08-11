@@ -166,6 +166,14 @@ func (mvcc *MVCC) CurrentRev() int64 {
 	return mvcc.currentRev
 }
 
+// Close 关闭底层存储（Badger DB），释放文件锁。
+// 关闭后不能再进行读写操作。
+func (mvcc *MVCC) Close() error {
+	mvcc.mu.Lock()
+	defer mvcc.mu.Unlock()
+	return mvcc.store.Close()
+}
+
 // findLE 二分查找 ≤ target 的最大 revision。revs 必须升序。
 func findLE(revs []int64, target int64) int64 {
 	var res int64 = 0
