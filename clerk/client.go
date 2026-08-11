@@ -35,9 +35,10 @@ type Option func(*Client) error
 // WithTLS 配置客户端使用 TLS 连接。
 //
 // 参数：
-//   caFile   — CA 证书路径，用于验证服务器证书是否由可信 CA 签发
-//   certFile — 客户端自己的证书路径（mTLS 时需要），普通 TLS 传空字符串
-//   keyFile  — 客户端私钥路径（mTLS 时需要）
+//
+//	caFile   — CA 证书路径，用于验证服务器证书是否由可信 CA 签发
+//	certFile — 客户端自己的证书路径（mTLS 时需要），普通 TLS 传空字符串
+//	keyFile  — 客户端私钥路径（mTLS 时需要）
 //
 // 普通 TLS（只验证服务器）：
 //
@@ -65,7 +66,7 @@ func WithTLS(caFile, certFile, keyFile string) Option {
 		c.kvcs = make([]proto.KvClient, len(c.addrs))
 
 		for i, addr := range c.addrs {
-			// 有 TLS 时用 tlsOpt，没有时回退 insecure（应该不会走这里，防御性代码）
+			// 有 TLS 时用 tlsOpt，没有时回退 insecure
 			var conn *grpc.ClientConn
 			if tlsOpt != nil {
 				conn, err = grpc.NewClient(addr, tlsOpt)
@@ -84,8 +85,6 @@ func WithTLS(caFile, certFile, keyFile string) Option {
 }
 
 // New 创建一个 Clerk 客户端。
-//
-// addrs 是所有节点的 gRPC 地址列表，如 []string{"192.168.1.10:50051", "192.168.1.11:50051"}。
 // 可以传入 Option 来配置 TLS 等选项。
 func New(addrs []string, opts ...Option) (*Client, error) {
 	if len(addrs) == 0 {
@@ -148,12 +147,6 @@ func (c *Client) nextID() int64 {
 }
 
 // tryNextLeader 切换到下一个可能的 Leader 节点。
-//
-// 策略：
-//   1. 优先使用 knownLeader（上一次成功通信的 Leader）
-//   2. 如果 knownLeader 不可用或就是当前节点，顺序尝试下一个（轮询）
-//
-// 并发安全：mu 锁保证只有一个 goroutine 在修改 leaderIdx。
 func (c *Client) tryNextLeader(current int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
