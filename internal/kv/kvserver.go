@@ -17,8 +17,6 @@ import (
 	po "google.golang.org/protobuf/proto"
 )
 
-// Close 关闭 KV 服务器：停止 Raft 后台 goroutine、关闭 Badger DB。
-// 用于测试中模拟崩溃后重启场景。
 func (kv *KvServer) Close() error {
 	kv.rf.Stop()
 	return kv.mvcc.Close()
@@ -138,7 +136,7 @@ func (kv *KvServer) InitKvserver(peers []string, me int) {
 		HeartbeatInterval:  kv.cfg.Raft.HeartbeatInterval,
 		RPCTimeout:         kv.cfg.Raft.RPCTimeout,
 		ReadIndexTimeout:   kv.cfg.Raft.ReadIndexTimeout,
-			DataDir:            fmt.Sprintf("%s/node-%d", kv.cfg.Node.DataDir, kv.cfg.Node.ID),
+		DataDir:            fmt.Sprintf("%s/node-%d", kv.cfg.Node.DataDir, kv.cfg.Node.ID),
 	}, raftTLSOpt)
 	//put请求通道
 	kv.waitCh = make(map[int64]chan result)

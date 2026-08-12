@@ -166,8 +166,7 @@ func (mvcc *MVCC) CurrentRev() int64 {
 	return mvcc.currentRev
 }
 
-// Close 关闭底层存储（Badger DB），释放文件锁。
-// 关闭后不能再进行读写操作。
+// Close关闭后不能再进行读写操作。
 func (mvcc *MVCC) Close() error {
 	mvcc.mu.Lock()
 	defer mvcc.mu.Unlock()
