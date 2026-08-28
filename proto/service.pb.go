@@ -1927,6 +1927,7 @@ func (x *Memberchange) GetType() string {
 type DeleteMemberRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Address       string                 `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1966,6 +1967,13 @@ func (x *DeleteMemberRequest) GetId() int32 {
 		return x.Id
 	}
 	return 0
+}
+
+func (x *DeleteMemberRequest) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
 }
 
 type DeleteMemberReply struct {
@@ -2740,9 +2748,10 @@ const file_proto_service_proto_rawDesc = "" +
 	"\fMemberchange\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x18\n" +
 	"\aaddress\x18\x02 \x01(\tR\aaddress\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\"%\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\"?\n" +
 	"\x13DeleteMemberRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x05R\x02id\"X\n" +
+	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x18\n" +
+	"\aaddress\x18\x02 \x01(\tR\aaddress\"X\n" +
 	"\x11DeleteMemberReply\x12&\n" +
 	"\x05error\x18\x01 \x01(\x0e2\x10.proto.ErrorTypeR\x05error\x12\x1b\n" +
 	"\tleader_id\x18\x02 \x01(\x03R\bleaderId\"\x92\x01\n" +

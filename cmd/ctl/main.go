@@ -23,6 +23,8 @@ var helpText = `Commands:
   putlease <key> <val> <lease>  — write key bound to existing lease
   keepalive <key>               — renew lease on key
   compact <revision>            — compact history up to revision
+  member add <id> <address>     — add cluster member
+  member del <id> <address>     — remove cluster member
   help                          — show this
   exit                          — quit
 `
@@ -232,6 +234,38 @@ func dispatch(ctx context.Context, c *clerk.Client, line string) {
 			fmt.Println("error:", err)
 		} else {
 			fmt.Println("OK")
+		}
+
+	case "member":
+		if len(parts) < 2 {
+			fmt.Println("usage: member add <id> <address> | member del <id> <address>")
+			return
+		}
+		if len(parts) < 4 {
+			fmt.Println("usage: member", parts[1], "<id> <address>")
+			return
+		}
+		id, err := strconv.ParseInt(parts[2], 10, 32)
+		if err != nil {
+			fmt.Println("error: id must be int:", parts[2])
+			return
+		}
+		addr := parts[3]
+		switch parts[1] {
+		case "add":
+			if err := c.AddMember(ctx, int32(id), addr); err != nil {
+				fmt.Println("error:", err)
+			} else {
+				fmt.Printf("OK member %s added\n", addr)
+			}
+		case "del":
+			if err := c.DeleteMember(ctx, int32(id), addr); err != nil {
+				fmt.Println("error:", err)
+			} else {
+				fmt.Printf("OK member %s removed\n", addr)
+			}
+		default:
+			fmt.Println("usage: member add <id> <address> | member del <id> <address>")
 		}
 
 	case "help":

@@ -250,6 +250,7 @@ message Memberchange {
 //移除集群成员
 message DeleteMemberRequest {
     int32 id = 1;
+    string address = 2;
 }
 
 message DeleteMemberReply {

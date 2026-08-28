@@ -19,7 +19,9 @@ func (kv *KvServer) Watch(req *proto.WatchRequest, stream proto.Kv_WatchServer) 
 	}
 
 	curRev := kv.mvcc.CurrentRev()
+
 	watcher := kv.watcherManager.Register(req.Key, req.Prefix, req.StartReversion, curRev)
+
 	defer kv.watcherManager.RemoveWatch(req.Key, watcher.Id)
 
 	if watcher.StartReversion > 0 && watcher.StartReversion < curRev { //需要历史数据

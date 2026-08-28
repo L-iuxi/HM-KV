@@ -53,10 +53,11 @@ func (kv *KvServer) AddMember(ctx context.Context, req *proto.AddMemberRequest) 
 
 }
 
-func (kv *KvServer) deleteMember(ctx context.Context, req *proto.DeleteMemberRequest) (*proto.DeleteMemberReply, error) {
+func (kv *KvServer) DeleteMember(ctx context.Context, req *proto.DeleteMemberRequest) (*proto.DeleteMemberReply, error) {
 	change := &proto.Memberchange{
-		Type: "delete",
-		Id:   req.Id,
+		Type:    "delete",
+		Id:      req.Id,
+		Address: req.Address,
 	}
 
 	op := &proto.Op{

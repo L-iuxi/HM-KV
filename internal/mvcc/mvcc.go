@@ -176,12 +176,18 @@ func (mvcc *MVCC) Close() error {
 // findLE 二分查找 ≤ target 的最大 revision。revs 必须升序。
 func findLE(revs []int64, target int64) int64 {
 	var res int64 = 0
-	for _, r := range revs {
-		if r <= target {
-			res = r
+	left, right := 0, len(revs)-1
+
+	for left <= right {
+		mid := left + (right-left)/2
+
+		if revs[mid] <= target {
+			res = revs[mid]
+			left = mid + 1
 		} else {
-			break
+			right = mid - 1
 		}
 	}
+
 	return res
 }
