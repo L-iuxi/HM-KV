@@ -50,8 +50,7 @@ func (c *Client) Lock(ctx context.Context, key string, leaseID int64) (*LockResp
 		case proto.ErrorType_LEASE_NO_EXIST:
 			return nil, fmt.Errorf("clerk: lock: lease %d not found", leaseID)
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		default:
 			return nil, fmt.Errorf("clerk: lock: unexpected error %v", reply.Error)
 		}
@@ -83,8 +82,7 @@ func (c *Client) Unlock(ctx context.Context, resp *LockResponse) error {
 			}
 			return nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		default:
 			return fmt.Errorf("clerk: unlock: unexpected error %v", reply.Error)
 		}

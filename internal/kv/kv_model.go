@@ -2,6 +2,7 @@ package kv
 
 import (
 	"TicketX/internal/config"
+	"TicketX/internal/db"
 	"TicketX/internal/lease"
 	"TicketX/internal/lock"
 	"TicketX/internal/mvcc"
@@ -30,6 +31,7 @@ type KvServer struct {
 	lastTxnResult map[int]txnresult //上一次 Txn 请求的结果
 	leaseMgr      *lease.LeaseManager
 	mvcc          *mvcc.MVCC
+	store         *db.Store
 	cfg           *config.Config //配置
 
 	watcherManager *watch.WatcherManager

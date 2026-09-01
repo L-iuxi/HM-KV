@@ -67,6 +67,7 @@ func MakeKVServer(cfg *config.Config) *KvServer {
 	if err != nil {
 		panic(err)
 	}
+	kv.store = store
 
 	//初始化mvcc相关
 	kv.InitMvcc(store)
@@ -147,6 +148,9 @@ func (kv *KvServer) InitKvserver(peers []string, me int) {
 	//requestid对应请求结果
 	kv.lastResult = make(map[int]result)
 	kv.lastTxnResult = make(map[int]txnresult)
+
+	// 从 Badger 恢复查重表（节点重启后仍能查重）
+	kv.loadDedup()
 
 	kv.loc = lock.NewLockManager(kv.leaseMgr, kv.mvcc, kv.watcherManager)
 }

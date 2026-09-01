@@ -124,6 +124,9 @@ func (rf *Raft) broadcastAppendEntries() {
 				} else {
 					rf.nextIndex[peerIdx] = args.PreLogIndex + 1
 				}
+
+				//Leader 从最新日志开始往前找，寻找一条已经复制到多数节点、并且属于当前任期的日志。
+				// 找到以后，就把它设置为 commitIndex。
 				for N := rf.getLastIndex(); N > rf.commitIndex; N-- {
 					if N <= rf.lastSnapIndex {
 						continue
@@ -304,36 +307,36 @@ func (rf *Raft) sendAppendEntriesTo(client proto.RaftClient, args *HeartbeatArgs
 	return true
 }
 
-// leader主动向某个follower发送日志
-func (rf *Raft) SendAppendEntries(server int32, args *HeartbeatArgs, reply *HeartbeatReply) bool {
+// // leader主动向某个follower发送日志
+// func (rf *Raft) SendAppendEntries(server int32, args *HeartbeatArgs, reply *HeartbeatReply) bool {
 
-	ctx, cancel := context.WithTimeout(context.Background(), rf.cfg.RPCTimeout)
-	defer cancel()
+// 	ctx, cancel := context.WithTimeout(context.Background(), rf.cfg.RPCTimeout)
+// 	defer cancel()
 
-	entries := make([]*proto.LogEntry, len(args.Entries))
-	for i, e := range args.Entries {
-		entries[i] = &proto.LogEntry{
-			Term:    int64(e.Term),
-			Command: e.Command,
-		}
-	}
+// 	entries := make([]*proto.LogEntry, len(args.Entries))
+// 	for i, e := range args.Entries {
+// 		entries[i] = &proto.LogEntry{
+// 			Term:    int64(e.Term),
+// 			Command: e.Command,
+// 		}
+// 	}
 
-	res, err := rf.clients[server].AppendEntries(ctx, &proto.HeartbeatArgs{
-		LeaderId:          int32(args.LeaderId),
-		LeaderTerm:        int32(args.LeaderTerm),
-		PreLogIndex:       int32(args.PreLogIndex),
-		PreLogTerm:        int32(args.PreLogTerm),
-		Entries:           entries,
-		LeaderCommitIndex: int32(args.LeaderCommitIndex),
-	})
+// 	res, err := rf.clients[server].AppendEntries(ctx, &proto.HeartbeatArgs{
+// 		LeaderId:          int32(args.LeaderId),
+// 		LeaderTerm:        int32(args.LeaderTerm),
+// 		PreLogIndex:       int32(args.PreLogIndex),
+// 		PreLogTerm:        int32(args.PreLogTerm),
+// 		Entries:           entries,
+// 		LeaderCommitIndex: int32(args.LeaderCommitIndex),
+// 	})
 
-	if err != nil {
-		return false
-	}
+// 	if err != nil {
+// 		return false
+// 	}
 
-	reply.Success = res.Success
-	reply.Term = int32(res.Term)
-	reply.ConflictIndex = int32(res.ConflictIndex)
+// 	reply.Success = res.Success
+// 	reply.Term = int32(res.Term)
+// 	reply.ConflictIndex = int32(res.ConflictIndex)
 
-	return true
-}
+// 	return true
+// }

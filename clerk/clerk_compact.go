@@ -26,8 +26,7 @@ func (c *Client) Compact(ctx context.Context, revision int64) error {
 		case proto.ErrorType_OK:
 			return nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		default:
 			return fmt.Errorf("clerk: compact: unexpected error %v", reply.Error)
 		}

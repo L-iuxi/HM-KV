@@ -99,12 +99,7 @@ func (c *Client) watch(ctx context.Context, key string, prefix bool, startRev in
 					}
 
 				case proto.ErrorType_WRONG_LEADER:
-					if resp.LeaderId >= 0 {
-						c.knownLeader.Store(resp.LeaderId)
-						c.leaderIdx.Store(int32(resp.LeaderId))
-					} else {
-						c.tryNextLeader(idx)
-					}
+					c.setLeader(resp.LeaderId)
 
 					break readLoop // 重新连接leader
 

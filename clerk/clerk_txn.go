@@ -38,8 +38,7 @@ func (c *Client) Txn(ctx context.Context, compares []*proto.Compare, success, fa
 				Results:   reply.Results,
 			}, nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		default:
 			return nil, fmt.Errorf("clerk: txn: unexpected error %v", reply.Error)
 		}

@@ -60,6 +60,27 @@ func (s *Store) Delete(key string) error {
 	})
 }
 
+// RawPut 写入原始字节。供查重表等非 MVCC 结构（非 types.Value）持久化用。
+func (s *Store) RawPut(key string, data []byte) error {
+	return s.DB.Update(func(txn *badger.Txn) error {
+		return txn.Set([]byte(key), data)
+	})
+}
+
+// RawGet 读取原始字节。key 不存在时返回 badger.ErrKeyNotFound。
+func (s *Store) RawGet(key string) ([]byte, error) {
+	var data []byte
+	err := s.DB.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(key))
+		if err != nil {
+			return err
+		}
+		data, err = item.ValueCopy(nil)
+		return err
+	})
+	return data, err
+}
+
 // DropAll 清空所有数据，用于快照恢复时重建状态。
 func (s *Store) DropAll() error {
 	return s.DB.DropAll()

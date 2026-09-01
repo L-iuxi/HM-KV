@@ -27,8 +27,7 @@ func (c *Client) AddMember(ctx context.Context, id int32, address string) error 
 		case proto.ErrorType_OK:
 			return nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		case proto.ErrorType_MEMBER_ALREADY_EXISTS:
 			return fmt.Errorf("clerk: add member %s: already exists", address)
 		default:
@@ -56,8 +55,7 @@ func (c *Client) DeleteMember(ctx context.Context, id int32, address string) err
 		case proto.ErrorType_OK:
 			return nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		case proto.ErrorType_MEMBER_NOT_FOUND:
 			return fmt.Errorf("clerk: delete member %s: not found", address)
 		default:

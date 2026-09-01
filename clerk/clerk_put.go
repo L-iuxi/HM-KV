@@ -27,8 +27,7 @@ func (c *Client) Put(ctx context.Context, key, value string) (int64, error) {
 		case proto.ErrorType_OK:
 			return reply.Version, nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		default:
 			return 0, fmt.Errorf("clerk: put %s: unexpected error %v", key, reply.Error)
 		}
@@ -57,8 +56,7 @@ func (c *Client) PutWithLease(ctx context.Context, key, value string, leaseID in
 		case proto.ErrorType_OK:
 			return reply.Version, nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		default:
 			return 0, fmt.Errorf("clerk: put %s: unexpected error %v", key, reply.Error)
 		}
@@ -87,7 +85,7 @@ func (c *Client) PutWithCAS(ctx context.Context, key, value string, expectedVers
 		case proto.ErrorType_OK:
 			return reply.Version, nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		case proto.ErrorType_WRONG_VERSION:
 			return 0, ErrCASConflict
 		default:

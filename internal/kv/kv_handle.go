@@ -26,6 +26,7 @@ func (kv *KvServer) HandlePut(op *proto.Op) types.Result {
 	// 记录请求结果
 	kv.lastRequest[op.ClientId] = op.RequestId
 	kv.lastResult[int(op.ClientId)] = res
+	kv.persistDedup()
 
 	return res
 }
@@ -110,6 +111,7 @@ func (kv *KvServer) HandleDelete(op *proto.Op) result {
 
 	kv.lastRequest[op.ClientId] = op.RequestId
 	kv.lastResult[int(op.ClientId)] = res
+	kv.persistDedup()
 
 	return res
 }
@@ -162,6 +164,7 @@ func (kv *KvServer) HandleBatch(op *proto.Op) result {
 		Version: kv.mvcc.CurrentRev(),
 	}
 	kv.lastResult[int(op.ClientId)] = res
+	kv.persistDedup()
 	return res
 }
 
@@ -208,6 +211,7 @@ func (kv *KvServer) HandleTxn(op *proto.Op) txnresult {
 
 	kv.lastRequest[op.ClientId] = op.RequestId
 	kv.lastTxnResult[int(op.ClientId)] = result
+	kv.persistDedup()
 
 	return result
 }

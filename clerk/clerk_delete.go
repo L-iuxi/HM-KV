@@ -26,8 +26,7 @@ func (c *Client) Delete(ctx context.Context, key string) (int64, error) {
 		case proto.ErrorType_OK:
 			return reply.Version, nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		default:
 			return 0, fmt.Errorf("clerk: delete %s: unexpected error %v", key, reply.Error)
 		}

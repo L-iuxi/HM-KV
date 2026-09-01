@@ -30,8 +30,7 @@ func (c *Client) Get(ctx context.Context, key string) (string, int64, error) {
 			}
 			return reply.Kvs[0].Value, reply.Version, nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		case proto.ErrorType_KEY_NOT_EXIST:
 			return "", 0, ErrKeyNotFound
 		default:
@@ -61,8 +60,7 @@ func (c *Client) GetPrefix(ctx context.Context, prefix string) ([]*proto.KeyValu
 		case proto.ErrorType_OK:
 			return reply.Kvs, reply.Version, nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		case proto.ErrorType_KEY_NOT_EXIST:
 			return nil, 0, ErrKeyNotFound
 		default:

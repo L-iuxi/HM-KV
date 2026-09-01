@@ -165,3 +165,16 @@ func (c *Client) tryNextLeader(current int) {
 	next := (current + 1) % len(c.addrs)
 	c.leaderIdx.Store(int32(next))
 }
+
+// setLeader 记录服务端返回的 leader id 作为当前 leader 下标。
+// LeaderId 是节点 id（rf.me），只有集群编号连续且 addrs 含全部节点时
+// 下标才等于节点 id。若 id 越界（如被尚未加入集群的节点抢占 leader，
+// 或 addrs 只是节点子集），不当下标使用，回退顺序探测，避免越界 panic。
+func (c *Client) setLeader(id int64) {
+	if id >= 0 && id < int64(len(c.addrs)) {
+		c.knownLeader.Store(id)
+		c.leaderIdx.Store(int32(id))
+		return
+	}
+	c.tryNextLeader(int(c.leaderIdx.Load()))
+}

@@ -22,8 +22,7 @@ func (c *Client) Grant(ctx context.Context, ttl int64) (int64, error) {
 		case proto.ErrorType_OK:
 			return reply.LeaseId, nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		default:
 			return 0, fmt.Errorf("clerk: grant: unexpected error %v", reply.Error)
 		}
@@ -46,7 +45,7 @@ func (c *Client) KeepAlive(ctx context.Context, key string) error {
 		case proto.ErrorType_OK:
 			return nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		case proto.ErrorType_KEY_NOT_EXIST:
 			return ErrKeyNotFound
 		default:

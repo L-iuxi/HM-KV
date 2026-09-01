@@ -26,8 +26,7 @@ func (c *Client) Batch(ctx context.Context, entries []*proto.Entry) error {
 		case proto.ErrorType_OK:
 			return nil
 		case proto.ErrorType_WRONG_LEADER:
-			c.knownLeader.Store(reply.LeaderId)
-			c.leaderIdx.Store(int32(reply.LeaderId))
+			c.setLeader(reply.LeaderId)
 		default:
 			return fmt.Errorf("clerk: batch: unexpected error %v", reply.Error)
 		}
